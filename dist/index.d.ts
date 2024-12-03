@@ -16,7 +16,7 @@ declare class StateManager {
     subscribe(callback: (key: string, value: any) => void): () => boolean;
     private notifySubscribers;
 }
-interface ReactExpressOptions {
+declare interface ReactExpressOptions {
     viewsDir?: string;
     hmr?: boolean;
 }
