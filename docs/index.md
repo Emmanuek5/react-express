@@ -110,6 +110,13 @@ Development features:
 
 [Learn more about HMR](./hmr.md)
 
+## Core Documentation
+
+- [Getting Started](./getting-started.md)
+- [Components and Hooks](./hooks.md)
+- [Virtual DOM](./vdom.md)
+- [Router](./router.md)
+
 ## Advanced Features
 
 ### Shared State

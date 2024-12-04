@@ -142,6 +142,8 @@ export function reactExpress(options: ReactExpressOptions = {}) {
             // Import router (it self-initializes)
             import '/__react-express/router.js';
 
+            import '/__react-express/vdom.js';
+
             // Import and initialize hooks
             import '/__react-express/hooks.js';
 
