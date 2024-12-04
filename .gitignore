@@ -60,7 +60,7 @@ node_modules/
 .pnp
 .pnp.js
 jspm_packages/
-test-server
+#test-server
 
 # Snowpack dependency directory (https://snowpack.dev/)
 

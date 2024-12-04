@@ -116,6 +116,7 @@ Advanced loading state management with customizable placeholders:
 </div>
 ```
 
+
 Features:
 - Beautiful default loading animation
 - Custom inline placeholders

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact Page - Router Test</title>
+    <style>
+      .content {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .nav {
+        background: #f0f0f0;
+        padding: 10px;
+        margin-bottom: 20px;
+      }
+      .nav a {
+        margin-right: 10px;
+      }
+      .prefetch-test {
+        margin-top: 20px;
+        padding: 20px;
+        background: #f9f9f9;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-content>
+      <div class="nav">
+        <a href="/" data-route>Home</a>
+        <a href="/about" data-route>About</a>
+        <a href="/contact" data-route>Contact</a>
+      </div>
+      <div class="content">
+        <h1>Contact Page</h1>
+        <p>This is a test page for the router functionality.</p>
+        <p>Current count from state: <span data-react-state="counter">0</span></p>
+        
+        <div class="prefetch-test">
+          <h2>Prefetch Test</h2>
+          <p>These links have the prefetch attribute, so their content will be loaded in advance:</p>
+          <a href="/" data-route prefetch>Home (prefetched)</a><br>
+          <a href="/about" data-route prefetch>About (prefetched)</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

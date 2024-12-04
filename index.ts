@@ -122,9 +122,11 @@ export function reactExpress(options: ReactExpressOptions = {}) {
           ${html}
           <script src="/socket.io/socket.io.js"></script>
           <script type="module">
+          
+
             const socket = io();
 
-            // Import and initialize state first
+            // Import and initialize state
             import { initState } from '/__react-express/state.js';
             await initState(socket);
 
@@ -139,6 +141,7 @@ export function reactExpress(options: ReactExpressOptions = {}) {
             // Initialize HMR last
             import { initHMR } from '/__react-express/hmr.js';
             await initHMR(socket);
+         
           </script>
         `;
 
