@@ -124,7 +124,7 @@ out
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
-
+test-server
 # Debug
 
 npm-debug.log*

@@ -115,37 +115,54 @@ export const LoaderManager = {
   },
 
   async loadContent(container) {
-    const path = container.getAttribute("data-suspense");
+    const componentPath = container.getAttribute("data-component-file");
+    if (!componentPath) return;
+
     try {
-      const placeholder =
-        container.getAttribute("data-placeholder-content") ||
-        this.defaultPlaceholder;
+      // Show loading state if placeholder exists
+      const placeholder = await this.loadPlaceholder(container) || this.defaultPlaceholder;
+      const originalContent = container.innerHTML;
       container.innerHTML = placeholder;
 
-      const response = await fetch(path);
-
+      // Fetch the component content
+      const response = await fetch(`/__react-express/component/${componentPath}`);
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to load component: ${response.statusText}`);
       }
 
       const content = await response.text();
+      
+      // Create temporary container to parse content
+      const temp = document.createElement("div");
+      temp.innerHTML = content;
 
-      // Fade out loader
-      const loader = container.querySelector(".react-express-loader");
-      if (loader) {
-        loader.style.opacity = "0";
-        await new Promise((resolve) => setTimeout(resolve, 300)); // Wait for fade
+      // Handle scripts before replacing content
+      const scripts = Array.from(temp.getElementsByTagName("script"));
+      
+      // Replace the content
+      container.innerHTML = content;
+
+      // Re-execute scripts
+      scripts.forEach(script => {
+        const newScript = document.createElement("script");
+        Array.from(script.attributes).forEach(attr => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.textContent = script.textContent;
+        script.parentNode.replaceChild(newScript, script);
+      });
+
+      // Mark as loaded
+      container.setAttribute("data-loaded", "true");
+      
+      // Register for HMR updates
+      if (window.ReactExpress && window.ReactExpress.hmr) {
+        window.ReactExpress.hmr.registerComponent(container, componentPath);
       }
 
-      container.innerHTML = content;
-      container.setAttribute("data-loaded", "true");
-      container.removeAttribute("data-error");
-
-      // Initialize any nested suspense containers
-      await this.setupSuspenseContainers();
     } catch (error) {
-      console.error("Loading error:", error);
       this.handleError(container);
+      console.error("Error loading component:", error);
     }
   },
 };

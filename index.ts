@@ -5,6 +5,7 @@ import * as chokidar from 'chokidar';
 import * as ejs from 'ejs';
 import * as path from 'path';
 import express from 'express';
+import { ScriptProcessor } from './utils/scriptProcessor.js';
 
 declare global {
   namespace Express {
@@ -60,7 +61,7 @@ export function reactExpress(options: ReactExpressOptions = {}) {
     }
 
     // Inject client-side code
-    app.use('/__react-express', express.static(path.join(__dirname, 'client')));
+    app.use('/__react-express', express.static(path.join(__dirname, '../client')));
 
     // Handle placeholder template requests
     app.get('/__react-express/placeholder/*', (req, res) => {
@@ -117,11 +118,14 @@ export function reactExpress(options: ReactExpressOptions = {}) {
           return;
         }
 
+        // Process scripts in the HTML
+        const { processedHtml } = ScriptProcessor.processScripts(html);
+
         // Inject our client-side code
         const injectedHtml = `
-          ${html}
-          <script src="/socket.io/socket.io.js"></script>
-          <script type="module">
+          ${processedHtml}
+          <script src="/socket.io/socket.io.js" defer></script>
+          <script type="module" defer>
           
 
             const socket = io();
@@ -138,6 +142,18 @@ export function reactExpress(options: ReactExpressOptions = {}) {
             // Import router (it self-initializes)
             import '/__react-express/router.js';
 
+            // Import and initialize hooks
+            import '/__react-express/hooks.js';
+
+            // Import and initialize forms
+            import '/__react-express/forms.js';
+
+            // Import and initialize context
+            import '/__react-express/context.js';
+            
+            // Import and initialize lifecycle
+            import  '/__react-express/lifecycle.js';
+          
             // Initialize HMR last
             import { initHMR } from '/__react-express/hmr.js';
             await initHMR(socket);
@@ -197,6 +213,8 @@ export function reactExpress(options: ReactExpressOptions = {}) {
         });
 
         watcher.on('change', (filepath) => {
+          console.log('File changed:', filepath);
+          
           io?.emit('hmr:update', {
             path: path.relative(process.cwd(), filepath),
             timestamp: Date.now()

@@ -2,7 +2,7 @@
 window.ReactExpress = window.ReactExpress || {
   state: new Map(),
   subscribers: new Map(),
-  
+
   initializeState() {
     // Initialize state elements
     document.querySelectorAll("[data-react-state]").forEach((element) => {
@@ -14,24 +14,62 @@ window.ReactExpress = window.ReactExpress || {
     });
   },
 
-  subscribe(keys, callback) {
-    const container = document.currentScript?.parentElement;
-    if (!container) return;
+  subscribe(keys, callback, elementId = null) {
+    if (!Array.isArray(keys)) {
+      keys = [keys];
+    }
 
     const id = Math.random().toString(36).substring(7);
-    this.subscribers.set(id, { keys, callback, container });
 
-    // Initial render
-    const values = keys.map(k => this.state.get(k));
+    // Function to find and update element - now checks for element each time
+    const updateTargetElement = (result) => {
+      if (!elementId || result === undefined) return;
+
+      // Always try to find the element fresh each time
+      const element = document.getElementById(elementId);
+      console.log(element);
+
+      if (element) {
+        try {
+          element.innerHTML = result;
+        } catch (err) {
+          console.warn(`Error updating element ${elementId}:`, err);
+        }
+      } else {
+        // If element not found, queue an update to try again shortly
+        // This helps with timing issues during route changes
+        setTimeout(() => {
+          const retryElement = document.getElementById(elementId);
+          if (retryElement) {
+            try {
+              retryElement.innerHTML = result;
+            } catch (err) {
+              console.warn(
+                `Error updating element ${elementId} on retry:`,
+                err
+              );
+            }
+          }
+        }, 0);
+      }
+    };
+
+    this.subscribers.set(id, {
+      keys,
+      callback,
+      elementId,
+      updateElement: updateTargetElement,
+    });
+
+    // Initial call with current values
+    const values = keys.map((k) => this.state.get(k));
     const result = callback(values);
-    if (result !== undefined) {
-      updateElement(container, result);
-    }
+    updateTargetElement(result);
 
     return id;
   },
 
-  setState(key, value, options = { sync: true }) {
+  setState(key, value, options = { sync: false }) {
     this.state.set(key, value);
 
     // Update DOM elements with matching data-react-state
@@ -40,13 +78,11 @@ window.ReactExpress = window.ReactExpress || {
       .forEach((element) => updateElement(element, value));
 
     // Update subscribers
-    this.subscribers.forEach(({ keys, callback, container }) => {
+    this.subscribers.forEach(({ keys, callback, updateElement }) => {
       if (keys.includes(key)) {
         const values = keys.map((k) => this.state.get(k));
         const result = callback(values);
-        if (result !== undefined && container) {
-          updateElement(container, result);
-        }
+        updateElement(result);
       }
     });
 
@@ -55,7 +91,6 @@ window.ReactExpress = window.ReactExpress || {
       socket.emit("state:update", { key, value });
     }
   },
-
   getState(key) {
     return this.state.get(key);
   },
@@ -81,7 +116,7 @@ window.ReactExpress = window.ReactExpress || {
     } catch (error) {
       console.error("Failed to load initial state:", error);
     }
-  }
+  },
 };
 
 const updateElement = (element, value) => {
@@ -125,7 +160,7 @@ export const initState = async (_socket) => {
 
   // Load initial state from server
   await window.ReactExpress.loadInitialState();
-  
+
   // Initialize the state system
   window.ReactExpress.initializeState();
 

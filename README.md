@@ -1,38 +1,52 @@
 # React Express Integration
 
-A TypeScript-based integration that allows you to use React Like features with Express.
+A TypeScript-based integration that brings React-like features to Express applications, providing a powerful and efficient way to build modern web applications.
+
+[📚 Full Documentation](docs/index.md)
+
+## Why Use React Express?
+
+React Express provides a powerful and efficient way to add React-like features to your Express applications:
+
+1. **Real-time State Management**: Reactive state management system with automatic DOM updates and WebSocket synchronization.
+
+2. **Server-Side Rendering**: Use React-like components with server-side rendering for optimal performance and SEO.
+
+3. **Modern Development**: Hot Module Reloading (HMR), TypeScript support, and developer-friendly tooling.
+
+4. **Progressive Enhancement**: Enhance your existing Express applications without a complete rewrite.
 
 ## Features
 
+### Core Features
 - Real-time state management with WebSocket support
 - Hot Module Reloading (HMR)
 - Server-side rendering with EJS
 - TypeScript support
 - Express middleware integration
 
-## Installation
+### React-Like Features
+- Context API for state sharing
+- Hooks system (useState, useEffect, etc.)
+- Component lifecycle methods
+- Props and refs system
+- Error boundaries
+- Suspense with loading states
 
+## Quick Start
+
+1. Install the package:
 ```bash
 npm install advanced-express
 ```
 
-## Development
-
-2. Start the test server:
-```bash
-cd test-server
-npm run dev
-```
-
-## Usage
-
+2. Set up your Express application:
 ```typescript
-import { reactExpress } from "advanced-express";
-import express from "express";
 import path from "path";
+import express from "express";
 import { Server } from "http";
 import { Server as SocketIOServer } from "socket.io";
-
+import { reactExpress } from "advanced-express";
 
 const app = express();
 const port = 3000;
@@ -53,119 +67,153 @@ const middleware = reactExpress({
 // Apply the middleware
 middleware(app);
 
-
 app.get("/", (req, res) => {
     res.render("index");
 });
 
-
 server.listen(port, () => {
-    console.log(`Example app listening on port ${port}`);
+    console.log(`Server running on http://localhost:${port}`);
 });
 ```
-### State Management
 
-The library provides a reactive state management system using data attributes:
+3. Create your views with React-like features:
 
 ```html
-<!-- Bind element to state -->
+<!-- State Management -->
 <div data-react-state="counter">0</div>
+<button onclick="ReactExpress.setState('counter', count => count + 1)">
+  Increment
+</button>
 
-<!-- Subscribe to state changes -->
-<script>
-  ReactExpress.subscribe(['counter'], ([count]) => {
-    return count * 2; // Return value updates the parent element
-  });
-
-  // Update state
-  ReactExpress.setState('counter', 1);
-
-  // Batch update multiple states
-  ReactExpress.batchUpdate({
-    counter: 1,
-    name: 'John'
-  });
-</script>
-```
-
-Features:
-- Declarative data binding with `data-react-state`
-- Automatic DOM updates
-- State subscriptions with automatic cleanup
-- Real-time sync with WebSocket
-- Batch state updates
-
-### Suspense
-
-Advanced loading state management with customizable placeholders:
-
-```html
-<!-- Basic suspense with default loading animation -->
-<div data-suspense="user-data">
-  Content that will be loaded
+<!-- Context -->
+<div data-context="theme" data-context-value="dark">
+  <div data-context-consumer="theme">
+    Current theme: {value}
+  </div>
 </div>
 
-<!-- Custom inline placeholder -->
-<div data-suspense="profile" data-placeholder="<div>Custom loading...</div>">
+<!-- Component with Lifecycle -->
+<div data-component="todo-list" data-prop-title="My Todos">
+  <ul ref="list"></ul>
+  <button ref="addButton">Add Todo</button>
+</div>
+
+<!-- Hooks -->
+<div data-component="counter">
+  <span data-value>0</span>
+  <button data-action="increment">+</button>
+</div>
+
+<!-- Suspense -->
+<div data-suspense="profile" data-placeholder="Loading...">
   Profile content
 </div>
 
-<!-- Load placeholder from a template file -->
-<div data-suspense="dashboard" data-placeholder-file="/templates/loading.ejs">
-  Dashboard content
+<!-- Client-side Routing -->
+<a href="/dashboard" data-route prefetch>Dashboard</a>
+```
+
+## Key Concepts
+
+### State Management
+```javascript
+// Set state
+ReactExpress.setState('counter', 5);
+
+// Subscribe to changes
+ReactExpress.subscribe(['counter'], ([count]) => {
+  return count * 2;
+});
+```
+
+### Context API
+```javascript
+const ThemeContext = ReactExpress.createContext('light');
+
+// Use in HTML
+<div data-context="theme" data-context-value="dark">
+  <div data-context-consumer="theme">Theme: {value}</div>
 </div>
 ```
 
-
-Features:
-- Beautiful default loading animation
-- Custom inline placeholders
-- Template-based placeholders via `data-placeholder-file`
-- Intersection Observer for lazy loading
-- Error handling with fallbacks
-- Smooth transitions with CSS animations
-
-The default placeholder includes a modern pulse animation and can be styled via CSS:
-
-```css
-.react-express-loader {
-  /* Your custom styles */
-  background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
-  animation: loader-pulse 1.5s ease-in-out infinite;
+### Hooks
+```javascript
+function Counter(element) {
+  const [count, setCount] = useState(0);
+  
+  useEffect(() => {
+    console.log('Count changed:', count);
+  }, [count]);
+  
+  return {
+    updateCallback: (value) => {
+      element.textContent = value;
+    }
+  };
 }
 ```
 
-### Routing/Prefetching 
+### Components
+```javascript
+class TodoList extends ReactExpress.Component {
+  constructor(element) {
+    super(element);
+    this.state = { todos: [] };
+  }
 
-Client-side routing with automatic prefetching:
+  componentDidMount() {
+    this.refs.addButton.addEventListener('click', () => {
+      this.setState(state => ({
+        todos: [...state.todos, 'New Todo']
+      }));
+    });
+  }
 
-```html
-<!-- Enable client-side routing -->
-<a href="/dashboard" data-route>Dashboard</a>
-
-<!-- Enable prefetching -->
-<a href="/profile" prefetch>Profile</a>
-
-<!-- Dynamic prefetch on viewport entry -->
-<a href="/settings" prefetch="visible">Settings</a>
+  render() {
+    return `
+      <h2>${this.props.title}</h2>
+      <ul ref="list">
+        ${this.state.todos.map(todo => `<li>${todo}</li>`).join('')}
+      </ul>
+      <button ref="addButton">Add Todo</button>
+    `;
+  }
+}
 ```
 
-Features:
-- SPA-like navigation with history support
-- Intelligent prefetching strategies
-- Cache management for prefetched content
-- Intersection Observer for viewport-based prefetching
+## Documentation
+
+For detailed documentation on all features, see our [Documentation](docs/index.md):
+
+- [State Management](docs/state.md)
+- [Router](docs/router.md)
+- [Suspense](docs/suspense.md)
+- [Context](docs/context.md)
+- [Hooks](docs/hooks.md)
+- [Component Lifecycle](docs/lifecycle.md)
+- [Hot Module Reloading](docs/hmr.md)
 
 ## Requirements
 
 - Node.js >= 18
 - npm >= 9.0.0
+- Express.js >= 4.17.1
 
-## Scripts
+## Development
 
-- `npm run build` - Build the TypeScript files
-- `npm run prepare` - Prepare the package for publishing
+```bash
+# Install dependencies
+npm install
+
+# Start the test server
+cd test-server
+npm run dev
+```
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
