@@ -1,12 +1,12 @@
 import type { Express } from 'express';
-
-declare namespace Express {
+declare global {
+    namespace Express {
         interface Request {
             reactState: StateManager;
             isAjax: boolean;
         }
     }
-
+}
 declare class StateManager {
     private state;
     private subscribers;
@@ -16,7 +16,7 @@ declare class StateManager {
     subscribe(callback: (key: string, value: any) => void): () => boolean;
     private notifySubscribers;
 }
-declare interface ReactExpressOptions {
+interface ReactExpressOptions {
     viewsDir?: string;
     hmr?: boolean;
 }

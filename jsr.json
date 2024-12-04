@@ -1,6 +1,0 @@
-{
-  "name": "@obsidian/react-express",
-  "version": "0.1.1",
-  "license": "MIT",
-  "exports": "./dist/index.d.ts"
-}
