@@ -115,6 +115,7 @@ Development features:
 - [Getting Started](./getting-started.md)
 - [Components and Hooks](./hooks.md)
 - [Virtual DOM](./vdom.md)
+- [State Management](./state-management.md)
 - [Router](./router.md)
 
 ## Advanced Features

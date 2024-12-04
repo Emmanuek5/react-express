@@ -61,6 +61,7 @@ export function reactExpress(options: ReactExpressOptions = {}) {
     }
 
     // Inject client-side code
+    app.use('/__react-express', express.static(path.join(__dirname, '../dist')));
     app.use('/__react-express', express.static(path.join(__dirname, '../client')));
 
     // Handle placeholder template requests
@@ -126,40 +127,16 @@ export function reactExpress(options: ReactExpressOptions = {}) {
           ${processedHtml}
           <script src="/socket.io/socket.io.js" defer></script>
           <script type="module" defer>
-          
-
             const socket = io();
-
-            // Import and initialize state
-            import { initState } from '/__react-express/state.js';
-            await initState(socket);
-
-            // Import and initialize suspense
-            import { LoaderManager, initSuspense } from '/__react-express/suspense.js';
-            LoaderManager.init();
-            await initSuspense();
-
-            // Import router (it self-initializes)
-            import '/__react-express/router.js';
-
-            import '/__react-express/vdom.js';
-
-            // Import and initialize hooks
-            import '/__react-express/hooks.js';
-
-            // Import and initialize forms
-            import '/__react-express/forms.js';
-
-            // Import and initialize context
-            import '/__react-express/context.js';
             
-            // Import and initialize lifecycle
-            import  '/__react-express/lifecycle.js';
-          
-            // Initialize HMR last
-            import { initHMR } from '/__react-express/hmr.js';
-            await initHMR(socket);
-         
+            // Import bundled ReactExpress
+            import '/__react-express/react-express.bundle.js';
+            
+            // Initialize components
+            await ReactExpress.initState(socket);
+            ReactExpress.LoaderManager.init();
+            await ReactExpress.initSuspense();
+            await ReactExpress.initHMR(socket);
           </script>
         `;
 
