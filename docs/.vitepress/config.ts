@@ -29,6 +29,7 @@ export default defineConfig({
           { text: 'State', link: '/state' },
           { text: 'Suspense', link: '/suspense' },
           { text: 'Virtual DOM', link: '/vdom' },
+          { text: 'Animations', link: '/animations' },
         ]
       }
     ],

@@ -21,6 +21,7 @@ export default {
       "./client/reactive-state.js",
       "./client/store.js",
       "./client/error-boundary.js",
+      "./client/animations.js",
     ],
   },
   output: {

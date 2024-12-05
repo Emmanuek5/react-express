@@ -91,19 +91,6 @@ window.ReactExpress = window.ReactExpress || {
       socket.emit("state:batch-update", { updates });
     }
   },
-
-  // Load initial state from server
-  async loadInitialState() {
-    try {
-      const response = await fetch("/api/state");
-      const initialState = await response.json();
-      Object.entries(initialState).forEach(([key, value]) => {
-        this.setState(key, value, { sync: false });
-      });
-    } catch (error) {
-      console.error("Failed to load initial state:", error);
-    }
-  },
 };
 
 const updateElement = (element, value) => {
@@ -145,20 +132,10 @@ let socket;
 export const initState = async (_socket) => {
   socket = _socket;
 
-  // Load initial state from server
-  await window.ReactExpress.loadInitialState();
-
   // Initialize the state system
   window.ReactExpress.initializeState();
 
   if (socket) {
-    // Handle initial state from server
-    socket.on("state:init", (initialState) => {
-      Object.entries(initialState).forEach(([key, value]) => {
-        window.ReactExpress.setState(key, value, { sync: false });
-      });
-    });
-
     // Handle individual state updates
     socket.on("state:update", ({ key, value }) => {
       window.ReactExpress.setState(key, value, { sync: false });
