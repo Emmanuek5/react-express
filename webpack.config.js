@@ -1,6 +1,6 @@
 import path from "path";
 import TerserPlugin from "terser-webpack-plugin";
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +20,9 @@ export default {
       "./client/hmr.js",
       "./client/reactive-state.js",
       "./client/store.js",
+      "./client/error-boundary.js",
+      "./client/devtools/core.js",
+      "./client/devtools/component-inspector.js",
     ],
   },
   output: {

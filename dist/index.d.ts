@@ -19,6 +19,7 @@ declare class StateManager {
 interface ReactExpressOptions {
     viewsDir?: string;
     hmr?: boolean;
+    devTools?: boolean;
 }
 export declare function reactExpress(options?: ReactExpressOptions): (app: Express) => void;
 export {};

@@ -47,17 +47,28 @@ class StateManager {
 interface ReactExpressOptions {
   viewsDir?: string;
   hmr?: boolean;
+  devTools?: boolean;
 }
+
+// Default options
+const defaultOptions: ReactExpressOptions = {
+  viewsDir: 'views',
+  hmr: process.env.NODE_ENV !== 'production',
+  devTools: process.env.NODE_ENV !== 'production'
+};
 
 export function reactExpress(options: ReactExpressOptions = {}) {
   const state = new StateManager();
   let io: SocketServer | null = null;
 
+  // Merge options with defaults
+  const mergedOptions = { ...defaultOptions, ...options };
+
   return function(app: Express) {
     // Set up EJS
     app.set('view engine', 'ejs');
-    if (options.viewsDir) {
-      app.set('views', options.viewsDir);
+    if (mergedOptions.viewsDir) {
+      app.set('views', mergedOptions.viewsDir);
     }
 
     // Inject client-side code
@@ -71,11 +82,11 @@ export function reactExpress(options: ReactExpressOptions = {}) {
         .replace('/__react-express/placeholder', '')
         .replace(/^\//, '');  // Remove leading slash
       
-      const viewsDir = options.viewsDir || app.get('views');
+      const viewsDir = mergedOptions.viewsDir || app.get('views');
       const fullPath = path.join(viewsDir, placeholderPath);
       
       // Render the placeholder template
-      app.render(placeholderPath, { ...options, __reactExpressState: state }, (err, html) => {
+      app.render(placeholderPath, { ...mergedOptions, __reactExpressState: state }, (err, html) => {
         if (err) {
           console.error('Error loading placeholder:', err);
           res.status(404).send('');
@@ -123,9 +134,9 @@ export function reactExpress(options: ReactExpressOptions = {}) {
         const { processedHtml } = ScriptProcessor.processScripts(html);
 
         // Inject our client-side code
-        const injectedHtml = `
-          ${processedHtml}
-          <script src="/socket.io/socket.io.js" defer></script>
+        const injectedHtml = processedHtml.replace(
+          '</head>',
+          `<script src="/socket.io/socket.io.js" defer></script>
           <script type="module" defer>
             const socket = io();
             
@@ -137,8 +148,13 @@ export function reactExpress(options: ReactExpressOptions = {}) {
             ReactExpress.LoaderManager.init();
             await ReactExpress.initSuspense();
             await ReactExpress.initHMR(socket);
-          </script>
-        `;
+
+            // Initialize DevTools if enabled
+            if (${mergedOptions.devTools}) {
+              ReactExpress.DevTools?.enable();
+            }
+          </script>\n</head>`
+        );
 
         if (callback) {
             //@ts-ignore
@@ -185,7 +201,7 @@ export function reactExpress(options: ReactExpressOptions = {}) {
       });
 
       // Set up HMR if enabled
-      if (options.hmr) {
+      if (mergedOptions.hmr) {
         const watcher = chokidar.watch(app.get('views'), {
           ignored: /(^|[\/\\])\../,
           persistent: true
