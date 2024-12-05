@@ -1,0 +1,3 @@
+name = "react-express-docs"
+compatibility_date = "2023-01-01"
+pages_build_output_dir = "docs/.vitepress/dist"
