@@ -23,35 +23,22 @@ window.ReactExpress = window.ReactExpress || {
 
     // Function to find and update element - now checks for element each time
     const updateTargetElement = (result) => {
-      if (!elementId || result === undefined) return;
-
-      // Always try to find the element fresh each time
-      const element = document.getElementById(elementId);
-      console.log(element);
-
-      if (element) {
-        try {
-          element.innerHTML = result;
-        } catch (err) {
-          console.warn(`Error updating element ${elementId}:`, err);
-        }
-      } else {
-        // If element not found, queue an update to try again shortly
-        // This helps with timing issues during route changes
-        setTimeout(() => {
-          const retryElement = document.getElementById(elementId);
-          if (retryElement) {
-            try {
-              retryElement.innerHTML = result;
-            } catch (err) {
-              console.warn(
-                `Error updating element ${elementId} on retry:`,
-                err
-              );
-            }
+      const attemptUpdate = (retries = 10) => {
+        const element = document.getElementById(elementId);
+        if (element) {
+          try {
+            element.innerHTML = result;
+          } catch (err) {
+            console.warn(`Error updating element ${elementId}:`, err);
           }
-        }, 0);
-      }
+        } else if (retries > 0) {
+          setTimeout(() => attemptUpdate(retries - 1), 100); // Retry after 100ms
+        } else {
+          console.warn(`Element with ID ${elementId} not found after retries.`);
+        }
+      };
+
+      attemptUpdate();
     };
 
     this.subscribers.set(id, {
@@ -183,3 +170,5 @@ export const initState = async (_socket) => {
     });
   }
 };
+
+ReactExpress.initState = initState;

@@ -102,7 +102,7 @@ export function reactExpress(options = {}) {
             const socket = io();
             
             // Import bundled ReactExpress
-            import '/__react-express/react-express.bundle.js';
+            import  '/__react-express/react-express.bundle.js';
             
             // Initialize components
             await ReactExpress.initState(socket);
