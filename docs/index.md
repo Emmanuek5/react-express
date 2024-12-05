@@ -19,11 +19,38 @@ npm install advanced-express
 ```
 
 ```javascript
-import express from 'express';
-import { reactExpress } from 'advanced-express';
+import path from "path";
+import express from "express";
+import { Server } from "http";
+import { Server as SocketIOServer } from "socket.io";
+import { reactExpress } from "advanced-express";
 
 const app = express();
-app.use(reactExpress());
+const port = 3000;
+const server = new Server(app);
+const io = new SocketIOServer(server);
+
+app.set("server", server);
+
+app.use(express.static(path.join(__dirname, "public")));
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "ejs");
+
+const middleware = reactExpress({
+    viewsDir: path.join(__dirname, 'views'),
+    hmr: true
+});
+
+// Apply the middleware
+middleware(app);
+
+app.get("/", (req, res) => {
+    res.render("index");
+});
+
+server.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+});
 ```
 
 ## Basic Example
