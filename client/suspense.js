@@ -120,32 +120,35 @@ export const LoaderManager = {
 
     try {
       // Show loading state if placeholder exists
-      const placeholder = await this.loadPlaceholder(container) || this.defaultPlaceholder;
+      const placeholder =
+        (await this.loadPlaceholder(container)) || this.defaultPlaceholder;
       const originalContent = container.innerHTML;
       container.innerHTML = placeholder;
 
       // Fetch the component content
-      const response = await fetch(`/__react-express/component/${componentPath}`);
+      const response = await fetch(
+        `/__react-express/component/${componentPath}`
+      );
       if (!response.ok) {
         throw new Error(`Failed to load component: ${response.statusText}`);
       }
 
       const content = await response.text();
-      
+
       // Create temporary container to parse content
       const temp = document.createElement("div");
       temp.innerHTML = content;
 
       // Handle scripts before replacing content
       const scripts = Array.from(temp.getElementsByTagName("script"));
-      
+
       // Replace the content
       container.innerHTML = content;
 
       // Re-execute scripts
-      scripts.forEach(script => {
+      scripts.forEach((script) => {
         const newScript = document.createElement("script");
-        Array.from(script.attributes).forEach(attr => {
+        Array.from(script.attributes).forEach((attr) => {
           newScript.setAttribute(attr.name, attr.value);
         });
         newScript.textContent = script.textContent;
@@ -154,18 +157,19 @@ export const LoaderManager = {
 
       // Mark as loaded
       container.setAttribute("data-loaded", "true");
-      
+
       // Register for HMR updates
       if (window.ReactExpress && window.ReactExpress.hmr) {
         window.ReactExpress.hmr.registerComponent(container, componentPath);
       }
-
     } catch (error) {
       this.handleError(container);
       console.error("Error loading component:", error);
     }
   },
 };
+
+ReactExpress.LoaderManager = LoaderManager;
 
 export const initSuspense = () => {
   LoaderManager.init();
@@ -175,3 +179,5 @@ export const initSuspense = () => {
     LoaderManager.setupSuspenseContainers();
   });
 };
+
+ReactExpress.initSuspense = initSuspense;

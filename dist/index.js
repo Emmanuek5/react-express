@@ -156,7 +156,6 @@ export function reactExpress(options = {}) {
                     persistent: true
                 });
                 watcher.on('change', (filepath) => {
-                    console.log('File changed:', filepath);
                     io?.emit('hmr:update', {
                         path: path.relative(process.cwd(), filepath),
                         timestamp: Date.now()
