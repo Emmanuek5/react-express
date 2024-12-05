@@ -1,3 +1,27 @@
+---
+layout: home
+hero:
+  name: React Express
+  text: Modern Server-Side React Framework
+  tagline: A powerful framework that brings React-like features to Express applications
+  actions:
+    - theme: brand
+      text: Get Started
+      link: /guide
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/Emmanuek5/react-express
+features:
+  - title: Component System
+    details: Create interactive UI components with state management and lifecycle events
+  - title: Server-Side Rendering
+    details: Render components on the server for fast initial load
+  - title: Hot Module Reloading
+    details: Update components in real-time during development
+  - title: TypeScript Support
+    details: Full TypeScript support for better development experience
+---
+
 # React Express
 
 React Express is a powerful framework that brings React-like features to Express applications. It provides a modern, component-based approach to building server-rendered applications with client-side interactivity.
@@ -141,7 +165,6 @@ Development features:
 
 ## Core Documentation
 
-- [Getting Started](./getting-started.md)
 - [Components and Hooks](./hooks.md)
 - [Virtual DOM](./vdom.md)
 - [State Management](./state-management.md)

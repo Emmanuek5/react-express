@@ -108,7 +108,8 @@ out
 # DynamoDB Local files
 
 .dynamodb/
-
+docs/.vitepress/cache
+docs/.vitepress/dist
 # TernJS port file
 
 .tern-port
