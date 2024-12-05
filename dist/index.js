@@ -97,7 +97,7 @@ export function reactExpress(options = {}) {
                 // Process scripts in the HTML
                 const { processedHtml } = ScriptProcessor.processScripts(html);
                 // Inject our client-side code
-                const injectedHtml = processedHtml.replace('</head>', `<script src="/socket.io/socket.io.js"></script>
+                const injectedHtml = processedHtml.replace('</head>', `<script src="/socket.io/socket.io.js" defer></script>
           <script type="module" defer>
             const socket = io();
             
