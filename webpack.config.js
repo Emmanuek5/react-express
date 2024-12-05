@@ -21,8 +21,6 @@ export default {
       "./client/reactive-state.js",
       "./client/store.js",
       "./client/error-boundary.js",
-      "./client/devtools/core.js",
-      "./client/devtools/component-inspector.js",
     ],
   },
   output: {

@@ -10,7 +10,8 @@ React Express is a powerful framework that brings React-like features to Express
 - **Shared State Management**: Share state between components easily
 - **Form Handling**: Built-in form validation and state management
 - **TypeScript Support**: Full TypeScript support for better development experience
-- **DevTools and Component Inspection**: Inspect and debug components with ease
+- **Performance Optimization**: Optimize rendering and component lifecycle
+- **Error Handling**: Graceful degradation and error boundaries   
 
 ## Quick Start
 
@@ -145,7 +146,8 @@ Development features:
 - [Virtual DOM](./vdom.md)
 - [State Management](./state-management.md)
 - [Router](./router.md)
-- [DevTools](./devtools.md)
+-  [Forms](./forms.md)
+- [Error Boundaries](./error-boundary.md)
 
 ## Advanced Features
 

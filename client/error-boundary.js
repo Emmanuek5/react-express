@@ -1,11 +1,7 @@
-// Error Boundary System for ReactExpress
 class ErrorBoundary {
   constructor(options = {}) {
     this.fallback = options.fallback || this.defaultFallback;
     this.onError = options.onError;
-    this.errorState = null;
-    this.wrappedContent = null;
-    this.boundaryElement = null;
   }
 
   defaultFallback(error) {
@@ -17,43 +13,45 @@ class ErrorBoundary {
     `;
   }
 
-  wrap(element, content) {
-    this.boundaryElement = element;
-    this.wrappedContent = content;
+  wrapComponent(element, options = {}) {
+    const component = ReactExpress.components.createComponent(element, {
+      initialState: { error: null },
 
-    // Create wrapper to catch errors
-    const wrapper = document.createElement("div");
-    wrapper.setAttribute("data-error-boundary", "");
+      init: (comp) => {
+        // Original initialization if provided
+        if (options.init) {
+          try {
+            options.init(comp);
+          } catch (error) {
+            this.handleError(comp, error);
+          }
+        }
 
-    try {
-      wrapper.innerHTML = content;
-    } catch (error) {
-      this.handleError(error);
-    }
+        // Add error event listener
+        comp.listen("self", "error", (event, comp) => {
+          event.preventDefault();
+          this.handleError(comp, event.error);
+        });
+      },
 
-    // Set up error event listener for runtime errors
-    wrapper.addEventListener("error", (event) => {
-      event.preventDefault();
-      this.handleError(event.error);
+      render: (state, el) => {
+        if (state.error) {
+          el.innerHTML = this.fallback(state.error);
+        } else if (options.render) {
+          try {
+            options.render(state, el);
+          } catch (error) {
+            this.handleError(comp, error);
+          }
+        }
+      },
     });
 
-    // Custom error event for caught errors
-    wrapper.addEventListener("react-express-error", (event) => {
-      this.handleError(event.detail.error);
-    });
-
-    element.appendChild(wrapper);
-
-    return {
-      reset: () => this.reset(),
-      destroy: () => this.destroy(),
-    };
+    return component;
   }
 
-  handleError(error) {
-    this.errorState = error;
-
-    // Call onError callback if provided
+  handleError(component, error) {
+    component.setState({ error });
     if (this.onError) {
       try {
         this.onError(error);
@@ -61,55 +59,7 @@ class ErrorBoundary {
         console.error("Error in error boundary callback:", callbackError);
       }
     }
-
-    // Log error
     console.error("Error caught by boundary:", error);
-
-    // Replace content with fallback
-    if (this.boundaryElement) {
-      const wrapper = this.boundaryElement.querySelector(
-        "[data-error-boundary]"
-      );
-      if (wrapper) {
-        wrapper.innerHTML = this.fallback(error);
-      }
-    }
-
-    // Dispatch error event for parent boundaries
-    const errorEvent = new CustomEvent("react-express-error", {
-      bubbles: true,
-      cancelable: true,
-      detail: { error },
-    });
-    this.boundaryElement?.dispatchEvent(errorEvent);
-  }
-
-  reset() {
-    if (this.boundaryElement && this.wrappedContent) {
-      this.errorState = null;
-      const wrapper = this.boundaryElement.querySelector(
-        "[data-error-boundary]"
-      );
-      if (wrapper) {
-        try {
-          wrapper.innerHTML = this.wrappedContent;
-        } catch (error) {
-          this.handleError(error);
-        }
-      }
-    }
-  }
-
-  destroy() {
-    if (this.boundaryElement) {
-      const wrapper = this.boundaryElement.querySelector(
-        "[data-error-boundary]"
-      );
-      wrapper?.remove();
-      this.boundaryElement = null;
-      this.wrappedContent = null;
-      this.errorState = null;
-    }
   }
 }
 
@@ -117,33 +67,3 @@ class ErrorBoundary {
 window.ReactExpress = window.ReactExpress || {};
 window.ReactExpress.createErrorBoundary = (options) =>
   new ErrorBoundary(options);
-
-// Error boundary hook
-window.ReactExpress.hooks.useErrorBoundary = (options = {}) => {
-  const [error, setError] = window.ReactExpress.hooks.useState(null);
-  const boundary = window.ReactExpress.hooks.useRef(null);
-
-  window.ReactExpress.hooks.useEffect(() => {
-    const element = document.getElementById(options.elementId);
-    if (!element) return;
-
-    boundary.current = window.ReactExpress.createErrorBoundary({
-      fallback: options.fallback,
-      onError: (error) => {
-        setError(error);
-        options.onError?.(error);
-      },
-    });
-
-    const { destroy } = boundary.current.wrap(element, options.children);
-    return destroy;
-  }, [options.elementId, options.children]);
-
-  return {
-    error,
-    reset: () => {
-      boundary.current?.reset();
-      setError(null);
-    },
-  };
-};

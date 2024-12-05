@@ -97,7 +97,7 @@ export function reactExpress(options = {}) {
                 // Process scripts in the HTML
                 const { processedHtml } = ScriptProcessor.processScripts(html);
                 // Inject our client-side code
-                const injectedHtml = processedHtml.replace('</head>', `<script src="/socket.io/socket.io.js" defer></script>
+                const injectedHtml = processedHtml.replace('</head>', `<script src="/socket.io/socket.io.js"></script>
           <script type="module" defer>
             const socket = io();
             
@@ -110,10 +110,7 @@ export function reactExpress(options = {}) {
             await ReactExpress.initSuspense();
             await ReactExpress.initHMR(socket);
 
-            // Initialize DevTools if enabled
-            if (${mergedOptions.devTools}) {
-              ReactExpress.DevTools?.enable();
-            }
+        
           </script>\n</head>`);
                 if (callback) {
                     //@ts-ignore
