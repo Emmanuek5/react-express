@@ -1,183 +1,281 @@
-export const LoaderManager = {
-  defaultPlaceholder: `
-    <div class="react-express-loader" style="
-      background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
-      background-size: 200% 100%;
-      animation: loader-pulse 1.5s ease-in-out infinite;
-      min-height: 100px;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    ">
-      <div class="loader-content" style="opacity: 0.5;">Loading...</div>
-    </div>
-  `,
+class LoaderManager {
+  static #instances = new WeakMap();
+  static #styleInjected = false;
+  static #cache = new Map();
 
-  styles: `
+  constructor(config = {}) {
+    this.config = {
+      retryAttempts: 3,
+      retryDelay: 1000,
+      timeout: 5000,
+      defaultCacheDuration: 5 * 60 * 1000, // 5 minutes
+      ...config,
+    };
+  }
+
+  static styles = `
     @keyframes loader-pulse {
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
-    
     .react-express-loader {
-      transition: opacity 0.3s ease-in-out;
+      background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: loader-pulse 1.5s infinite;
+      padding: 20px;
+      text-align: center;
+      color: #888;
     }
-  `,
+  `;
 
-  init() {
-    const styleSheet = document.createElement("style");
-    styleSheet.textContent = this.styles;
-    document.head.appendChild(styleSheet);
-    this.setupSuspenseContainers();
-    this.initializeIntersectionObserver();
-  },
+  static defaultPlaceholder = `
+    <div class="react-express-loader">Loading...</div>
+  `;
 
-  async loadPlaceholder(container) {
-    const placeholderPath = container.getAttribute("data-placeholder-file");
-    if (!placeholderPath) return null;
-
-    try {
-      // Remove leading slash if present
-      const normalizedPath = placeholderPath.replace(/^\//, "");
-      const response = await fetch(
-        `/__react-express/placeholder/${normalizedPath}`
-      );
-      if (!response.ok) return null;
-      return await response.text();
-    } catch (error) {
-      console.error("Error loading placeholder:", error);
-      return null;
+  static getInstance(container) {
+    if (!this.#instances.has(container)) {
+      this.#instances.set(container, new LoaderManager());
     }
-  },
+    return this.#instances.get(container);
+  }
 
-  async setupSuspenseContainers() {
-    const containers = document.querySelectorAll("[data-suspense]");
-    for (const container of containers) {
-      if (!container.hasAttribute("data-setup")) {
-        let placeholder = container.getAttribute("data-placeholder");
-
-        // If no inline placeholder but has a placeholder file, load it
-        if (!placeholder && container.hasAttribute("data-placeholder-file")) {
-          placeholder = await this.loadPlaceholder(container);
-        }
-
-        // Fall back to default if no placeholder was found
-        placeholder = placeholder || this.defaultPlaceholder;
-
-        container.setAttribute("data-original-content", container.innerHTML);
-        container.setAttribute("data-setup", "true");
-        container.setAttribute("data-placeholder-content", placeholder);
-
-        if (!container.hasAttribute("data-loaded")) {
-          container.innerHTML = placeholder;
-        }
-      }
+  static init() {
+    if (!this.#styleInjected) {
+      const style = document.createElement("style");
+      style.textContent = this.styles;
+      document.head.appendChild(style);
+      this.#styleInjected = true;
     }
-  },
 
-  initializeIntersectionObserver() {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (
-            entry.isIntersecting &&
-            !entry.target.hasAttribute("data-loaded")
-          ) {
-            this.loadContent(entry.target);
+    this.setupMutationObserver();
+    this.processContainers();
+  }
+
+  static setupMutationObserver() {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.hasAttribute("data-suspense")) {
+              this.getInstance(node).processContainer(node);
+            }
+            const children = node.querySelectorAll("[data-suspense]");
+            children.forEach((child) =>
+              this.getInstance(child).processContainer(child)
+            );
           }
-        });
-      },
-      {
-        rootMargin: "50px",
+        }
       }
-    );
-
-    document.querySelectorAll("[data-suspense]").forEach((container) => {
-      observer.observe(container);
     });
-  },
 
-  handleError(container) {
-    // On error, either show nothing or keep the placeholder based on container attributes
-    const keepPlaceholder = container.hasAttribute(
-      "data-keep-placeholder-on-error"
-    );
-    if (keepPlaceholder) {
-      container.innerHTML =
-        container.getAttribute("data-placeholder-content") ||
-        this.defaultPlaceholder;
-    } else {
-      container.innerHTML = "";
-    }
-    // Mark as error state but don't show visible error
-    container.setAttribute("data-error", "true");
-  },
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  static processContainers() {
+    document.querySelectorAll("[data-suspense]").forEach((container) => {
+      this.getInstance(container).processContainer(container);
+    });
+  }
+
+  async processContainer(container) {
+    if (container.hasAttribute("data-processed")) return;
+
+    const apiEndpoint = container.getAttribute("data-api");
+    if (!apiEndpoint) return;
+
+    container.setAttribute("data-processed", "true");
+    await this.loadContent(container);
+  }
 
   async loadContent(container) {
-    const componentPath = container.getAttribute("data-component-file");
-    if (!componentPath) return;
+    const apiEndpoint = container.getAttribute("data-api");
+    const cacheKey = container.getAttribute("data-cache-key") || apiEndpoint;
+    const cacheDuration =
+      parseInt(container.getAttribute("data-cache-duration")) ||
+      this.config.defaultCacheDuration;
 
     try {
-      // Show loading state if placeholder exists
-      const placeholder =
-        (await this.loadPlaceholder(container)) || this.defaultPlaceholder;
-      const originalContent = container.innerHTML;
-      container.innerHTML = placeholder;
-
-      // Fetch the component content
-      const response = await fetch(
-        `/__react-express/component/${componentPath}`
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to load component: ${response.statusText}`);
+      const cachedData = this.getCachedData(cacheKey);
+      if (cachedData) {
+        await this.renderContent(container, cachedData);
+        return;
       }
 
-      const content = await response.text();
+      container._originalContent = container.innerHTML;
+      container.innerHTML = this.getPlaceholder(container);
 
-      // Create temporary container to parse content
-      const temp = document.createElement("div");
-      temp.innerHTML = content;
-
-      // Handle scripts before replacing content
-      const scripts = Array.from(temp.getElementsByTagName("script"));
-
-      // Replace the content
-      container.innerHTML = content;
-
-      // Re-execute scripts
-      scripts.forEach((script) => {
-        const newScript = document.createElement("script");
-        Array.from(script.attributes).forEach((attr) => {
-          newScript.setAttribute(attr.name, attr.value);
-        });
-        newScript.textContent = script.textContent;
-        script.parentNode.replaceChild(newScript, script);
-      });
-
-      // Mark as loaded
-      container.setAttribute("data-loaded", "true");
-
-      // Register for HMR updates
-      if (window.ReactExpress && window.ReactExpress.hmr) {
-        window.ReactExpress.hmr.registerComponent(container, componentPath);
-      }
+      const data = await this.fetchWithRetry(apiEndpoint);
+      this.setCachedData(cacheKey, data, cacheDuration);
+      await this.renderContent(container, data);
     } catch (error) {
-      this.handleError(container);
-      console.error("Error loading component:", error);
+      this.handleError(container, error);
     }
-  },
-};
+  }
 
-ReactExpress.LoaderManager = LoaderManager;
+  getCachedData(key) {
+    const cacheItem = LoaderManager.#cache.get(key);
+    if (!cacheItem) return null;
 
-export const initSuspense = () => {
-  LoaderManager.init();
+    const { data, expiry } = cacheItem;
+    if (Date.now() > expiry) {
+      LoaderManager.#cache.delete(key);
+      return null;
+    }
 
-  // Handle dynamic content updates
-  document.addEventListener("react-express:content-update", () => {
-    LoaderManager.setupSuspenseContainers();
-  });
-};
+    return data;
+  }
 
-ReactExpress.initSuspense = initSuspense;
+  setCachedData(key, data, duration) {
+    LoaderManager.#cache.set(key, {
+      data,
+      expiry: Date.now() + duration,
+    });
+  }
+
+  async fetchWithRetry(url, attempt = 1) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        this.config.timeout
+      );
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok)
+        throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new Error(`Request timeout after ${this.config.timeout}ms`);
+      }
+
+      if (attempt < this.config.retryAttempts) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.config.retryDelay)
+        );
+        return this.fetchWithRetry(url, attempt + 1);
+      }
+
+      throw error;
+    }
+  }
+
+  getPlaceholder(container) {
+    // Check for inline placeholder element
+    const inlinePlaceholder = container.querySelector(
+      "[data-suspense-placeholder]"
+    );
+    if (inlinePlaceholder) {
+      const content = inlinePlaceholder.innerHTML;
+      inlinePlaceholder.remove();
+      return content;
+    }
+
+    // Fall back to attribute-based placeholder
+    const placeholderAttr = container.getAttribute("data-suspense-placeholder");
+    if (placeholderAttr) {
+      if (placeholderAttr.startsWith("#")) {
+        const template = document.querySelector(placeholderAttr);
+        return template ? template.innerHTML : LoaderManager.defaultPlaceholder;
+      }
+      return placeholderAttr;
+    }
+
+    return LoaderManager.defaultPlaceholder;
+  }
+
+  async renderContent(container, data) {
+    container.innerHTML = container._originalContent;
+
+    const bindPromises = Array.from(
+      container.querySelectorAll("[data-bind]")
+    ).map(async (element) => {
+      const bindPath = element.getAttribute("data-bind");
+      const value = this.getNestedValue(data, bindPath);
+
+      if (value !== undefined) {
+        if (element.tagName === "IMG") {
+          await this.loadImage(element, value);
+        } else if (["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName)) {
+          element.value = value;
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+        } else {
+          element.textContent = value;
+        }
+      }
+    });
+
+    await Promise.all(bindPromises);
+    container.setAttribute("data-loaded", "true");
+    container.dispatchEvent(
+      new CustomEvent("content-loaded", { detail: data })
+    );
+  }
+
+  async loadImage(imgElement, src) {
+    return new Promise((resolve, reject) => {
+      imgElement.onload = resolve;
+      imgElement.onerror = reject;
+      imgElement.src = src;
+    });
+  }
+
+  handleError(container, error) {
+    const errorTemplate = document.querySelector("#error-template");
+    const errorHTML = errorTemplate
+      ? errorTemplate.innerHTML
+      : `
+      <div class="suspense-error" style="color: red; padding: 10px; background: #ffeeee; border: 1px solid red;">
+        <strong>Error Loading Content</strong>
+        <p>${error.message}</p>
+        <button class="retry-button">Retry</button>
+      </div>
+    `;
+
+    container.innerHTML = errorHTML;
+    container.setAttribute("data-error", "true");
+
+    container.querySelector(".retry-button")?.addEventListener("click", () => {
+      this.loadContent(container);
+    });
+
+    container.dispatchEvent(
+      new CustomEvent("content-error", { detail: error })
+    );
+    console.error("Loader Manager error:", error);
+  }
+
+  getNestedValue(obj, path) {
+    return path
+      .split(".")
+      .reduce(
+        (acc, part) => (acc && typeof acc === "object" ? acc[part] : undefined),
+        obj
+      );
+  }
+
+  // Static method to clear cache
+  static clearCache(key) {
+    if (key) {
+      this.#cache.delete(key);
+    } else {
+      this.#cache.clear();
+    }
+  }
+}
+
+// Initialize on DOM load
+document.addEventListener("DOMContentLoaded", () => LoaderManager.init());
+
+// Export for module environments
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = LoaderManager;
+} else {
+  window.ReactExpress = window.ReactExpress || {};
+  window.ReactExpress.LoaderManager = LoaderManager;
+}

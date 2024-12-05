@@ -106,7 +106,7 @@ out
 .fusebox/
 
 # DynamoDB Local files
-
+#test-server
 .dynamodb/
 docs/.vitepress/cache
 docs/.vitepress/dist
@@ -125,7 +125,7 @@ docs/.vitepress/dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
-#test-server
+test-server
 # Debug
 
 npm-debug.log*

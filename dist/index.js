@@ -107,7 +107,7 @@ export function reactExpress(options = {}) {
             // Initialize components
             await ReactExpress.initState(socket);
             ReactExpress.LoaderManager.init();
-            await ReactExpress.initSuspense();
+     
             await ReactExpress.initHMR(socket);
 
         

@@ -19,7 +19,7 @@ class HotModuleReplacement {
    */
   setupSocketListeners() {
     if (!this.socket) {
-      console.error('Socket not initialized for HMR');
+      console.error("Socket not initialized for HMR");
       return;
     }
 
@@ -66,8 +66,9 @@ class HotModuleReplacement {
     this.restoreStateValues(stateValues);
     this.restoreFormStates(formStates);
 
-    // Re-execute scripts
+    // Re-execute scripts and update styles
     this.processScripts();
+    this.processStyles();
 
     // Dispatch successful update event
     this.dispatchUpdateEvent(true);
@@ -106,19 +107,27 @@ class HotModuleReplacement {
   }
 
   /**
-   * Merge content while preserving critical scripts
+   * Merge content while preserving critical scripts and handling styles
    * @private
    * @param {HTMLElement} oldContainer - Current content container
    * @param {HTMLElement} newContainer - New content container
    */
   mergeContent(oldContainer, newContainer) {
-    // Preserve scripts and socket.io
+    // Preserve critical scripts and socket.io
     const preserveScripts = Array.from(
       document.getElementsByTagName("script")
     ).filter(
       (script) =>
         script.src.includes("socket.io") || script.src.includes("react-express")
     );
+
+    // Remove existing styles
+    Array.from(document.head.getElementsByTagName("style")).forEach((style) =>
+      style.remove()
+    );
+    Array.from(document.head.getElementsByTagName("link")).forEach((link) => {
+      if (link.rel === "stylesheet") link.remove();
+    });
 
     // Replace entire body content
     oldContainer.innerHTML = newContainer.innerHTML;
@@ -170,9 +179,9 @@ class HotModuleReplacement {
    * @private
    */
   processScripts() {
-    const scripts = Array.from(
-      document.getElementsByTagName("script")
-    ).filter((script) => !script.hasAttribute("data-processed"));
+    const scripts = Array.from(document.getElementsByTagName("script")).filter(
+      (script) => !script.hasAttribute("data-processed")
+    );
 
     for (const script of scripts) {
       try {
@@ -194,6 +203,35 @@ class HotModuleReplacement {
         console.error("Error processing script:", scriptError);
       }
     }
+  }
+
+  /**
+   * Process and add new styles
+   * @private
+   */
+  processStyles() {
+    const newStyleElements = Array.from(
+      document.getElementsByTagName("style")
+    ).filter((style) => !style.hasAttribute("data-processed"));
+
+    const newStylesheets = Array.from(
+      document.getElementsByTagName("link")
+    ).filter(
+      (link) =>
+        link.rel === "stylesheet" && !link.hasAttribute("data-processed")
+    );
+
+    // Add new style elements to head
+    newStyleElements.forEach((style) => {
+      style.setAttribute("data-processed", "true");
+      document.head.appendChild(style.cloneNode(true));
+    });
+
+    // Add new stylesheets to head
+    newStylesheets.forEach((link) => {
+      link.setAttribute("data-processed", "true");
+      document.head.appendChild(link.cloneNode(true));
+    });
   }
 
   /**
