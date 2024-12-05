@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Forms Demo - React Express</title>
+    <style>
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .form-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      button {
+        background: #0066cc;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0052a3;
+      }
+      .error {
+        color: red;
+        margin-top: 5px;
+        font-size: 0.9em;
+      }
+      .success {
+        color: green;
+        margin-top: 5px;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" data-content>
+      <h1>Forms Demo</h1>
+
+      <!-- Basic Form -->
+      <div class="form-card">
+        <h2>Basic Form</h2>
+        <form data-react-form="basic" method="POST" action="/api/basic-form">
+          <div class="form-group">
+            <label>Name</label>
+            <input name="name" required />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input name="email" type="email" required />
+          </div>
+          <button type="submit">Submit</button>
+        </form>
+      </div>
+
+      <!-- Validated Form -->
+      <div class="form-card">
+        <h2>Form with Validation</h2>
+        <form data-react-form="signup" data-validate>
+          <div class="form-group">
+            <label>Username</label>
+            <input name="username" required />
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input name="password" type="password" required />
+          </div>
+          <div class="form-group">
+            <label>Confirm Password</label>
+            <input name="confirmPassword" type="password" required />
+          </div>
+          <button type="submit">Sign Up</button>
+        </form>
+      </div>
+
+      <!-- Form with State Integration -->
+      <div class="form-card">
+        <h2>Form with State Integration</h2>
+        <form
+          data-react-form="profile"
+          data-update-state="userProfile"
+          data-transform="transformProfileData"
+        >
+          <div class="form-group">
+            <label>First Name</label>
+            <input name="firstName" required />
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input name="lastName" required />
+          </div>
+          <div class="form-group">
+            <label>Bio</label>
+            <textarea name="bio" rows="4"></textarea>
+          </div>
+          <button type="submit">Update Profile</button>
+        </form>
+
+        <!-- Display current state -->
+        <div class="state-display">
+          <h3>Current Profile State:</h3>
+          <pre data-react-state="userProfile"></pre>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Validation function for signup form
+      function validateSignup(data) {
+        if (data.password.length < 8) {
+          return "Password must be at least 8 characters";
+        }
+        if (data.password !== data.confirmPassword) {
+          return "Passwords do not match";
+        }
+        return true;
+      }
+
+      // Transform function for profile form
+      function transformProfileData(data) {
+        return {
+          ...data,
+          fullName: `${data.firstName} ${data.lastName}`,
+          lastUpdated: new Date().toISOString(),
+        };
+      }
+
+      // Success handlers
+      function handleBasicSuccess(response) {
+        console.log("Form submitted successfully:", response);
+      }
+
+      function handleProfileSuccess(response) {
+        console.log("Profile updated:", response);
+      }
+    </script>
+  </body>
+</html>

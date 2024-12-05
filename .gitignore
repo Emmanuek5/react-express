@@ -125,7 +125,7 @@ docs/.vitepress/dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
-test-server
+t@est-server
 # Debug
 
 npm-debug.log*

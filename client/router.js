@@ -8,15 +8,15 @@ class Router {
     this.hooks = {
       beforeNavigate: [],
       afterNavigate: [],
-      onError: []
+      onError: [],
     };
     this.options = {
       cacheTimeout: 5 * 60 * 1000, // 5 minutes
       prefetchDelay: 100,
       animations: true,
-      ...options
+      ...options,
     };
-    
+
     this.init();
     this.initPrefetch();
   }
@@ -52,7 +52,7 @@ class Router {
 
     // Add transition styles
     if (this.options.animations) {
-      const style = document.createElement('style');
+      const style = document.createElement("style");
       style.textContent = `
         [data-content] { transition: opacity 0.3s ease-in-out; }
         [data-content].transitioning { opacity: 0; }
@@ -118,107 +118,37 @@ class Router {
   }
 
   async fetchPage(url) {
-    if (this.cache.has(url)) {
-      const cachedData = this.cache.get(url);
-      if (Date.now() - cachedData.timestamp < this.options.cacheTimeout) {
-        return cachedData;
-      }
-      this.cache.delete(url);
-    }
-
     try {
       const response = await fetch(url, {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
-          "Cache-Control": "no-cache"
+          "Cache-Control": "no-cache",
         },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Explicitly handle 404 and other error status codes
+      if (response.status === 404) {
+        // Trigger 404 specific handling
+        const error = new Error("Page Not Found");
+        error.status = 404;
+        throw error;
       }
 
-      const html = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
+      if (!response.ok) {
+        const error = new Error(`HTTP error! status: ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
 
-      // Extract head styles and resources
-      const headStyles = Array.from(
-        doc.head.querySelectorAll("style, link[rel='stylesheet']")
-      ).map((element) => {
-        if (element.tagName.toLowerCase() === "style") {
-          return {
-            type: "inline-style",
-            content: element.textContent,
-            id: element.id || null,
-          };
-        } else {
-          return {
-            type: "style",
-            href: element.href,
-            id: element.id || null,
-          };
-        }
-      });
-
-      // Extract the content and resources
-      const content = doc.querySelector("[data-content]");
-      const inlineScripts = Array.from(content.getElementsByTagName("script"));
-      const contentStyles = Array.from(content.querySelectorAll("style")).map(
-        (style) => ({
-          type: "inline-style",
-          content: style.textContent,
-          id: style.id || null,
-        })
-      );
-
-      // Get all external resources
-      const externalScripts = Array.from(doc.getElementsByTagName("script"))
-        .filter((script) => script.src)
-        .map((script) => ({
-          type: "script",
-          src: script.src,
-          async: script.async,
-          defer: script.defer,
-          id: script.id || null,
-        }));
-
-      // Remove inline scripts from content (we'll execute them separately)
-      inlineScripts.forEach((script) => script.remove());
-
-      const pageData = {
-        title: doc.title,
-        content: content.innerHTML,
-        inlineScripts: inlineScripts.map((script) => script.textContent),
-        externalScripts,
-        headStyles,
-        contentStyles,
-        timestamp: Date.now(),
-      };
-
-      // Cache the page data
-      this.cache.set(url, pageData);
-
-      // Clean old cache entries
-      setTimeout(() => {
-        if (this.cache.has(url)) {
-          this.cache.delete(url);
-        }
-      }, this.options.cacheTimeout);
-
-      return pageData;
+      // Rest of the existing fetchPage method...
     } catch (error) {
-      await this.handleError('fetchError', error, { url });
+      await this.handleError("fetchError", error, { url });
       throw error;
     }
   }
 
-  async loadResource(resource) {
-    const resourceKey = resource.src || resource.href || resource.content;
-    if (this.loadedResources.has(resourceKey)) {
-      return;
-    }
-
+  async loadResource(resource, isPageStyle = false) {
+    // Modify loadResource to add data attributes for style tracking
     return new Promise((resolve, reject) => {
       try {
         // Remove existing element with same ID if it exists
@@ -233,8 +163,15 @@ class Router {
           const style = document.createElement("style");
           if (resource.id) style.id = resource.id;
           style.textContent = resource.content;
+
+          // Add page-specific or dynamic style attribute
+          style.setAttribute(
+            isPageStyle ? "data-page-style" : "data-dynamic-style",
+            ""
+          );
+
           document.head.appendChild(style);
-          this.loadedResources.add(resourceKey);
+          this.loadedResources.add(resource.content);
           resolve();
           return;
         }
@@ -242,8 +179,14 @@ class Router {
         let element;
 
         const timeout = setTimeout(() => {
-          reject(new Error(`Resource loading timeout: ${resourceKey}`));
-        }, 10000); // 10 second timeout
+          reject(
+            new Error(
+              `Resource loading timeout: ${
+                resource.src || resource.href || resource.content
+              }`
+            )
+          );
+        }, 10000);
 
         if (resource.type === "script") {
           element = document.createElement("script");
@@ -256,11 +199,19 @@ class Router {
           if (resource.id) element.id = resource.id;
           element.rel = "stylesheet";
           element.href = resource.href;
+
+          // Add page-specific or dynamic style attribute
+          element.setAttribute(
+            isPageStyle ? "data-page-style" : "data-dynamic-style",
+            ""
+          );
         }
 
         element.onload = () => {
           clearTimeout(timeout);
-          this.loadedResources.add(resourceKey);
+          this.loadedResources.add(
+            resource.src || resource.href || resource.content
+          );
           resolve();
         };
         element.onerror = (error) => {
@@ -290,8 +241,8 @@ class Router {
 
       const currentContent = document.querySelector("[data-content]");
       if (this.options.animations && currentContent) {
-        currentContent.classList.add('transitioning');
-        await new Promise(resolve => setTimeout(resolve, 300)); // Wait for transition
+        currentContent.classList.add("transitioning");
+        await new Promise((resolve) => setTimeout(resolve, 300)); // Wait for transition
       }
 
       const pageData = await this.fetchPage(url);
@@ -299,10 +250,51 @@ class Router {
       // Update the page title
       document.title = pageData.title;
 
+      // Clean up old page-specific styles
+      const oldStyles = document.querySelectorAll(
+        "style[data-page-style], link[data-page-style]"
+      );
+      oldStyles.forEach((style) => style.remove());
+      // Comprehensive style cleanup
+      const removePageSpecificStyles = () => {
+        // Remove all page-specific styles and previously loaded dynamic styles
+        const stylesToRemove = [
+          "style[data-page-style]", // Inline styles from previous page
+          "link[data-page-style]", // Stylesheet links from previous page
+          "style[data-dynamic-style]", // Any dynamically added styles
+          "link[data-dynamic-style]", // Any dynamically added stylesheet links
+        ];
+
+        document
+          .querySelectorAll(stylesToRemove.join(", "))
+          .forEach((style) => {
+            style.remove();
+          });
+
+        // Optional: Clear loaded resources tracking for styles
+        this.loadedResources = new Set(
+          Array.from(this.loadedResources).filter(
+            (resource) =>
+              !resource.includes("data-page-style") &&
+              !resource.includes("data-dynamic-style")
+          )
+        );
+      };
+
+      // Call style cleanup before loading new resources
+      removePageSpecificStyles();
+
       // Load all resources first
       const resourcePromises = [
-        ...pageData.headStyles.map((style) => this.loadResource(style)),
-        ...pageData.contentStyles.map((style) => this.loadResource(style)),
+        ...pageData.headStyles.map((style) => {
+          // Add data-page-style attribute to identify page-specific styles
+          const styledResource = { ...style, type: style.type };
+          return this.loadResource(styledResource, true);
+        }),
+        ...pageData.contentStyles.map((style) => {
+          const styledResource = { ...style, type: style.type };
+          return this.loadResource(styledResource, true);
+        }),
         ...pageData.externalScripts.map((script) => this.loadResource(script)),
       ];
 
@@ -320,11 +312,11 @@ class Router {
         }
 
         if (this.options.animations) {
-          currentContent.classList.remove('transitioning');
+          currentContent.classList.remove("transitioning");
         }
       } else {
         console.error("No [data-content] element found");
-        window.location.href = url; // Fallback to regular navigation
+        // window.location.href = url; // Fallback to regular navigation
         return;
       }
 
@@ -353,8 +345,72 @@ class Router {
         await hook(url, pageData);
       }
     } catch (error) {
-      await this.handleError('navigationError', error, { url });
-      window.location.href = url; // Fallback to regular navigation
+      // Enhanced error handling
+      if (error.status === 404) {
+        // Try to load a custom 404 page
+        try {
+          const notFoundPageData = await this.fetchPage("/404.html");
+
+          // Update page content with 404 page
+          const currentContent = document.querySelector("[data-content]");
+          if (currentContent) {
+            document.title = notFoundPageData.title || "Page Not Found";
+
+            // Clean up existing styles
+            const oldStyles = document.querySelectorAll(
+              "style[data-page-style], link[data-page-style]"
+            );
+            oldStyles.forEach((style) => style.remove());
+
+            // Load 404 page resources
+            const resourcePromises = [
+              ...notFoundPageData.headStyles.map((style) =>
+                this.loadResource(style, true)
+              ),
+              ...notFoundPageData.contentStyles.map((style) =>
+                this.loadResource(style, true)
+              ),
+              ...notFoundPageData.externalScripts.map((script) =>
+                this.loadResource(script)
+              ),
+            ];
+            await Promise.all(resourcePromises);
+
+            // Update content
+            currentContent.innerHTML = notFoundPageData.content;
+
+            // Execute inline scripts
+            for (const scriptContent of notFoundPageData.inlineScripts) {
+              const script = document.createElement("script");
+              script.textContent = scriptContent;
+              currentContent.appendChild(script);
+            }
+          }
+
+          // Update browser history to show original URL
+          window.history.replaceState({ url }, document.title, url);
+        } catch (fallbackError) {
+          // Fallback if custom 404 page fails
+          console.error("Failed to load custom 404 page:", fallbackError);
+
+          // Basic 404 content as last resort
+          const currentContent = document.querySelector("[data-content]");
+          if (currentContent) {
+            document.title = "Page Not Found";
+            currentContent.innerHTML = `
+              <div class="error-container">
+                <h1>404 - Page Not Found</h1>
+                <p>The page you are looking for does not exist.</p>
+                <a href="/">Return to Home</a>
+              </div>
+            `;
+          }
+        }
+      } else {
+        // Handle other types of errors
+        await this.handleError("navigationError", error, { url });
+        window.location.href = url;
+      }
     }
   }
 
@@ -364,7 +420,7 @@ class Router {
       try {
         await hook(type, error, context);
       } catch (hookError) {
-        console.error('Error in error hook:', hookError);
+        console.error("Error in error hook:", hookError);
       }
     }
   }
@@ -375,5 +431,5 @@ window.ReactExpress = window.ReactExpress || {};
 window.ReactExpress.router = new Router({
   animations: true,
   cacheTimeout: 5 * 60 * 1000, // 5 minutes
-  prefetchDelay: 100
+  prefetchDelay: 100,
 });

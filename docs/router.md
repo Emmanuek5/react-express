@@ -83,6 +83,36 @@ Enables prefetching for links:
 <a href="/settings" prefetch="visible">Settings</a>
 ```
 
+### Important Implementation Requirements
+
+### Required HTML Attributes
+
+For the router to function properly, you must include specific data attributes in your HTML:
+
+1. **Main Layout File**
+   - Add a `data-content` attribute to the main content container where pages will be loaded
+   - Example:
+   ```html
+   <main data-content>
+     <!-- Page content will be loaded here -->
+   </main>
+   ```
+
+2. **Page Template Files**
+   - Each page template that can be loaded by the router must have a root element with `data-content`
+   - Example:
+   ```html
+   <div data-content>
+     <!-- Your page specific content -->
+   </div>
+   ```
+
+These attributes are essential for:
+- Proper page transitions
+- Content replacement during navigation
+- Maintaining scroll position
+- Animation handling
+
 ### Page Transitions
 
 #### CSS Classes
