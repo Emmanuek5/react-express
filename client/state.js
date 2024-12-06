@@ -68,6 +68,10 @@ window.ReactExpress = window.ReactExpress || {
     this.subscribers.forEach(({ keys, callback, updateElement }) => {
       if (keys.includes(key)) {
         const values = keys.map((k) => this.state.get(k));
+        if (!callback || typeof callback !== "function") {
+          console.error("Invalid callback function for subscriber:", callback);
+          return;
+        }
         const result = callback(values);
         updateElement(result);
       }

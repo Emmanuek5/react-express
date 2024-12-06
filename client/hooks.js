@@ -3,6 +3,10 @@ class ComponentManager {
   constructor() {
     this.components = new Map();
     this.eventBus = new EventTarget();
+    this.memoizedValues = new Map();
+    this.refs = new Map();
+    this.callbacks = new Map();
+    this.stateBindings = new Map();
   }
 
   // Create a stateful component with automatic DOM updates
@@ -83,6 +87,175 @@ class ComponentManager {
     return component;
   }
 
+  // Hooks Implementation
+  hooks = {
+    useState: (key, initialValue) => {
+      // Initialize state if not exists
+      if (!this.stateBindings.has(key)) {
+        this.stateBindings.set(key, {
+          value: initialValue,
+          elements: new Set(),
+          formatters: new Map()
+        });
+
+        // Initial DOM scan for elements
+        this._scanForStateBindings(key);
+      }
+
+      const binding = this.stateBindings.get(key);
+
+      const getState = () => binding.value;
+
+      const setState = (newValue) => {
+        const value = typeof newValue === 'function' ? newValue(binding.value) : newValue;
+        binding.value = value;
+        
+        // Update all bound elements
+        this._updateBoundElements(key);
+
+        // Dispatch event for subscribers
+        this.eventBus.dispatchEvent(new CustomEvent(key, { detail: value }));
+      };
+
+      return [getState, setState];
+    },
+
+    // Enhanced bindState with automatic formatting
+    bindState: (key, element, formatter) => {
+      if (!this.stateBindings.has(key)) {
+        this.stateBindings.set(key, {
+          value: null,
+          elements: new Set(),
+          formatters: new Map()
+        });
+      }
+
+      const binding = this.stateBindings.get(key);
+      binding.elements.add(element);
+      
+      if (formatter) {
+        binding.formatters.set(element, formatter);
+      }
+
+      // Initial update
+      this._updateElement(element, binding.value, formatter);
+
+      return () => {
+        binding.elements.delete(element);
+        binding.formatters.delete(element);
+      };
+    },
+
+    useEffect: (callback, dependencies = []) => {
+      let cleanup = null;
+      const handler = () => {
+        if (cleanup) cleanup();
+        cleanup = callback();
+      };
+
+      dependencies.forEach(dep => {
+        this.eventBus.addEventListener(dep, handler);
+      });
+
+      // Initial call
+      handler();
+
+      return () => {
+        if (cleanup) cleanup();
+        dependencies.forEach(dep => {
+          this.eventBus.removeEventListener(dep, handler);
+        });
+      };
+    },
+
+    useMemo: (factory, dependencies = []) => {
+      const key = dependencies.join('|');
+      if (!this.memoizedValues.has(key)) {
+        this.memoizedValues.set(key, factory());
+      }
+
+      dependencies.forEach(dep => {
+        this.eventBus.addEventListener(dep, () => {
+          this.memoizedValues.set(key, factory());
+        });
+      });
+
+      return this.memoizedValues.get(key);
+    },
+
+    useRef: (elementId) => {
+      if (!this.refs.has(elementId)) {
+        this.refs.set(elementId, {
+          current: document.getElementById(elementId)
+        });
+      }
+      return this.refs.get(elementId);
+    },
+
+    useCallback: (callback, dependencies = [], delay = 0) => {
+      const key = dependencies.join('|');
+      
+      if (!this.callbacks.has(key)) {
+        if (delay > 0) {
+          let timeoutId;
+          const debouncedCallback = (...args) => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => callback(...args), delay);
+          };
+          this.callbacks.set(key, debouncedCallback);
+        } else {
+          this.callbacks.set(key, callback);
+        }
+      }
+
+      return this.callbacks.get(key);
+    }
+  };
+
+  // Private helper methods
+  _scanForStateBindings(key) {
+    document.querySelectorAll(`[data-react-state="${key}"]`).forEach(element => {
+      const binding = this.stateBindings.get(key);
+      if (!binding.elements.has(element)) {
+        binding.elements.add(element);
+        const formatter = element.getAttribute('data-format');
+        if (formatter) {
+          try {
+            binding.formatters.set(element, new Function('value', `return ${formatter}`));
+          } catch (e) {
+            console.error(`Invalid formatter for ${key}:`, e);
+          }
+        }
+      }
+    });
+  }
+
+  _updateBoundElements(key) {
+    const binding = this.stateBindings.get(key);
+    binding.elements.forEach(element => {
+      const formatter = binding.formatters.get(element);
+      this._updateElement(element, binding.value, formatter);
+    });
+  }
+
+  _updateElement(element, value, formatter) {
+    try {
+      const displayValue = formatter ? formatter(value) : value;
+      
+      if (element.tagName === 'INPUT') {
+        if (element.type === 'checkbox') {
+          element.checked = !!value;
+        } else {
+          element.value = displayValue ?? '';
+        }
+      } else {
+        element.textContent = displayValue ?? '';
+      }
+    } catch (e) {
+      console.error('Error updating element:', e);
+    }
+  }
+
   // Get component by element or ID
   getComponent(elementOrId) {
     const id = typeof elementOrId === 'string' 
@@ -125,6 +298,7 @@ class ComponentManager {
 // Initialize React Express component system
 window.ReactExpress = window.ReactExpress || {};
 window.ReactExpress.components = new ComponentManager();
+window.ReactExpress.hooks = window.ReactExpress.components.hooks;
 
 /* Example Usage:
 const counter = ReactExpress.components.createComponent(
