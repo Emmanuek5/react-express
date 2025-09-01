@@ -2,6 +2,7 @@ class HotModuleReplacement {
   constructor() {
     this.socket = null;
     this.updateListeners = new Set();
+    this._debounceTimer = null;
   }
 
   /**
@@ -23,13 +24,17 @@ class HotModuleReplacement {
       return;
     }
 
-    this.socket.on("hmr:update", async (data) => {
-      try {
-        console.log("Received HMR update:", data);
-        await this.processUpdate();
-      } catch (error) {
-        this.handleUpdateError(error);
-      }
+    // Coalesce rapid updates into a single patch
+    this.socket.on("hmr:update", (data) => {
+      if (this._debounceTimer) clearTimeout(this._debounceTimer);
+      this._debounceTimer = setTimeout(async () => {
+        try {
+          console.log("Received HMR update:", data);
+          await this.processUpdate();
+        } catch (error) {
+          this.handleUpdateError(error);
+        }
+      }, 100);
     });
   }
 
@@ -40,38 +45,75 @@ class HotModuleReplacement {
   async processUpdate() {
     const response = await fetch(
       `/__react-express/placeholder${window.location.pathname}`,
-      {
-        headers: { "X-HMR-Request": "true" },
-      }
+      { headers: { "X-HMR-Request": "true" } }
     );
     const html = await response.text();
 
     // Create temporary container to parse content
-    const temp = document.createElement("div");
+    const temp = document.createElement("html");
     temp.innerHTML = html;
 
-    // Preserve current state
+    // Preserve current state and UI context
     const stateValues = this.captureStateValues();
     const formStates = this.captureFormStates();
+    const focusAndScroll = this.captureFocusAndScroll();
 
-    // Identify the main content container
-    const contentContainer =
-      document.querySelector("body") || document.documentElement;
-    const newContentContainer = temp.querySelector("body") || temp;
+    // Identify root containers
+    const currentContainer = this.getRootContainer(document);
+    const nextContainer = this.getRootContainer(temp);
 
-    // Merge content
-    this.mergeContent(contentContainer, newContentContainer);
+    // Merge only the target container
+    this.mergeContent(currentContainer, nextContainer);
 
-    // Restore states
+    // Restore states and UI context
     this.restoreStateValues(stateValues);
     this.restoreFormStates(formStates);
+    this.restoreFocusAndScroll(focusAndScroll);
 
-    // Re-execute scripts and update styles
-    this.processScripts();
+    // Re-execute scripts inside the updated container and hot-swap stylesheets
+    this.processScripts(currentContainer);
     this.processStyles();
+    
+    // Re-initialize ReactExpress systems (state, components)
+    try {
+      if (window.ReactExpress && typeof window.ReactExpress.initializeState === 'function') {
+        window.ReactExpress.initializeState();
+      }
+    } catch (e) {
+      try {
+        window.ReactExpress &&
+          window.ReactExpress.ErrorOverlay &&
+          window.ReactExpress.ErrorOverlay.log(e, { type: 'hmr-init', phase: 'state' });
+      } catch {}
+    }
+    try {
+      if (window.ReactExpress && typeof window.ReactExpress.initializeComponents === 'function') {
+        window.ReactExpress.initializeComponents(currentContainer);
+      }
+    } catch (e) {
+      try {
+        window.ReactExpress &&
+          window.ReactExpress.ErrorOverlay &&
+          window.ReactExpress.ErrorOverlay.log(e, { type: 'hmr-init', phase: 'components' });
+      } catch {}
+    }
 
     // Dispatch successful update event
     this.dispatchUpdateEvent(true);
+  }
+
+  /**
+   * Locate the root container for patching
+   * @param {Document|HTMLElement} root
+   */
+  getRootContainer(root) {
+    const scope = /** @type {Document} */ (root.nodeType === 9 ? root : root.ownerDocument);
+    return (
+      (root.querySelector && root.querySelector('[data-react-root]')) ||
+      (root.querySelector && root.querySelector('main')) ||
+      (scope && scope.body) ||
+      document.body
+    );
   }
 
   /**
@@ -113,29 +155,8 @@ class HotModuleReplacement {
    * @param {HTMLElement} newContainer - New content container
    */
   mergeContent(oldContainer, newContainer) {
-    // Preserve critical scripts and socket.io
-    const preserveScripts = Array.from(
-      document.getElementsByTagName("script")
-    ).filter(
-      (script) =>
-        script.src.includes("socket.io") || script.src.includes("react-express")
-    );
-
-    // Remove existing styles
-    Array.from(document.head.getElementsByTagName("style")).forEach((style) =>
-      style.remove()
-    );
-    Array.from(document.head.getElementsByTagName("link")).forEach((link) => {
-      if (link.rel === "stylesheet") link.remove();
-    });
-
-    // Replace entire body content
-    oldContainer.innerHTML = newContainer.innerHTML;
-
-    // Restore critical scripts
-    preserveScripts.forEach((script) => {
-      oldContainer.appendChild(script.cloneNode(true));
-    });
+    // Replace only the target container content
+    oldContainer.innerHTML = newContainer ? newContainer.innerHTML : '';
   }
 
   /**
@@ -178,9 +199,13 @@ class HotModuleReplacement {
    * Process and re-execute scripts
    * @private
    */
-  processScripts() {
-    const scripts = Array.from(document.getElementsByTagName("script")).filter(
-      (script) => !script.hasAttribute("data-processed")
+  processScripts(container) {
+    if (!container) return;
+    const scripts = Array.from(container.querySelectorAll("script")).filter(
+      (script) =>
+        !script.hasAttribute("data-processed") &&
+        !(script.src && (script.src.includes("socket.io") || script.src.includes("react-express.bundle.js"))) &&
+        !script.hasAttribute("data-hmr-skip")
     );
 
     for (const script of scripts) {
@@ -192,15 +217,17 @@ class HotModuleReplacement {
 
         if (!script.src) {
           newScript.textContent = script.textContent;
-          script.parentNode.replaceChild(newScript, script);
-        } else {
-          // For external scripts, just replace
-          script.parentNode.replaceChild(newScript, script);
         }
 
-        script.setAttribute("data-processed", "true");
+        newScript.setAttribute("data-processed", "true");
+        script.parentNode.replaceChild(newScript, script);
       } catch (scriptError) {
         console.error("Error processing script:", scriptError);
+        try {
+          window.ReactExpress &&
+            window.ReactExpress.ErrorOverlay &&
+            window.ReactExpress.ErrorOverlay.log(scriptError, { type: 'script' });
+        } catch {}
       }
     }
   }
@@ -210,27 +237,20 @@ class HotModuleReplacement {
    * @private
    */
   processStyles() {
-    const newStyleElements = Array.from(
-      document.getElementsByTagName("style")
-    ).filter((style) => !style.hasAttribute("data-processed"));
-
-    const newStylesheets = Array.from(
-      document.getElementsByTagName("link")
-    ).filter(
-      (link) =>
-        link.rel === "stylesheet" && !link.hasAttribute("data-processed")
-    );
-
-    // Add new style elements to head
-    newStyleElements.forEach((style) => {
-      style.setAttribute("data-processed", "true");
-      document.head.appendChild(style.cloneNode(true));
-    });
-
-    // Add new stylesheets to head
-    newStylesheets.forEach((link) => {
-      link.setAttribute("data-processed", "true");
-      document.head.appendChild(link.cloneNode(true));
+    // Hot-swap stylesheets by cache-busting href
+    const timestamp = Date.now();
+    const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+    links.forEach((link) => {
+      try {
+        const url = new URL(link.href, window.location.origin);
+        url.searchParams.set('hmr', String(timestamp));
+        const newLink = link.cloneNode(true);
+        newLink.href = url.toString();
+        link.parentNode.replaceChild(newLink, link);
+      } catch (e) {
+        // Fallback: force reload if URL parsing fails
+        link.href = link.href + (link.href.includes('?') ? '&' : '?') + 'hmr=' + timestamp;
+      }
     });
   }
 
@@ -241,13 +261,13 @@ class HotModuleReplacement {
    */
   handleUpdateError(error) {
     console.error("HMR update failed:", error);
-
-    // Force reload for critical errors
-    if (error.message.includes("SyntaxError")) {
-      location.reload();
-    } else {
-      this.dispatchUpdateEvent(false, error);
-    }
+    // Never force reload; log to overlay and keep app running
+    try {
+      window.ReactExpress &&
+        window.ReactExpress.ErrorOverlay &&
+        window.ReactExpress.ErrorOverlay.log(error, { type: 'hmr' });
+    } catch {}
+    this.dispatchUpdateEvent(false, error);
   }
 
   /**
@@ -265,6 +285,10 @@ class HotModuleReplacement {
       },
     });
     window.dispatchEvent(event);
+    // Notify custom listeners
+    this.updateListeners.forEach((listener) => {
+      try { listener({ success, path: window.location.pathname, error }); } catch {}
+    });
   }
 
   /**
@@ -276,6 +300,43 @@ class HotModuleReplacement {
     this.updateListeners.add(listener);
     return () => this.updateListeners.delete(listener);
   }
+
+  /**
+   * Capture focus element and window scroll
+   */
+  captureFocusAndScroll() {
+    const active = document.activeElement;
+    let selector = null;
+    if (active && active !== document.body) {
+      if (active.id) selector = `#${CSS.escape(active.id)}`;
+      else if (active.name) selector = `${active.tagName.toLowerCase()}[name="${CSS.escape(active.name)}"]`;
+    }
+    return {
+      selector,
+      selectionStart: /** @type {any} */(active).selectionStart ?? null,
+      selectionEnd: /** @type {any} */(active).selectionEnd ?? null,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    };
+  }
+
+  /**
+   * Restore focus element and window scroll
+   */
+  restoreFocusAndScroll(ctx) {
+    try {
+      if (ctx.selector) {
+        const el = document.querySelector(ctx.selector);
+        if (el && typeof el.focus === 'function') {
+          el.focus();
+          if (ctx.selectionStart != null && ctx.selectionEnd != null && typeof el.setSelectionRange === 'function') {
+            el.setSelectionRange(ctx.selectionStart, ctx.selectionEnd);
+          }
+        }
+      }
+    } catch {}
+    window.scrollTo({ left: ctx.scrollX || 0, top: ctx.scrollY || 0, behavior: 'auto' });
+  }
 }
 
 // Create a singleton instance
@@ -285,5 +346,7 @@ export const initHMR = (socket) => {
   hmr.init(socket);
 };
 
-ReactExpress.initHMR = initHMR;
-ReactExpress.hmr = hmr;
+// Ensure global namespace exists and expose API on window.ReactExpress
+window.ReactExpress = window.ReactExpress || {};
+window.ReactExpress.initHMR = initHMR;
+window.ReactExpress.hmr = hmr;

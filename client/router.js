@@ -14,6 +14,7 @@ class Router {
       cacheTimeout: 5 * 60 * 1000, // 5 minutes
       prefetchDelay: 100,
       animations: true,
+      preserveScroll: true,
       ...options,
     };
 
@@ -46,6 +47,9 @@ class Router {
     // Handle browser back/forward buttons
     window.addEventListener("popstate", async (e) => {
       if (e.state && e.state.url) {
+        // capture the scroll position stored in history state
+        this.pendingScrollY =
+          typeof e.state.scrollY === "number" ? e.state.scrollY : 0;
         await this.navigateTo(e.state.url, false);
       }
     });
@@ -65,6 +69,12 @@ class Router {
     // Find all links with prefetch attribute
     const prefetchLinks = document.querySelectorAll("a[prefetch]");
     prefetchLinks.forEach((link) => {
+      const mode = link.getAttribute("prefetch");
+      if (mode && mode.toLowerCase() === "visible") {
+        // Only prefetch when visible via IntersectionObserver below
+        return;
+      }
+      // Eager prefetch by default when attribute is present
       this.prefetchQueue.add(link.href);
     });
 
@@ -119,7 +129,19 @@ class Router {
 
   async fetchPage(url) {
     try {
-      const response = await fetch(url, {
+      // Normalize URL for consistent cache keys
+      const absoluteUrl = new URL(url, window.location.href).href;
+
+      // Serve from cache if fresh
+      const cached = this.cache.get(absoluteUrl);
+      if (
+        cached &&
+        Date.now() - cached.ts < (this.options.cacheTimeout || 0)
+      ) {
+        return cached.data;
+      }
+
+      const response = await fetch(absoluteUrl, {
         headers: {
           "X-Requested-With": "XMLHttpRequest",
           "Cache-Control": "no-cache",
@@ -140,7 +162,87 @@ class Router {
         throw error;
       }
 
-      // Rest of the existing fetchPage method...
+      const html = await response.text();
+
+      // Parse HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+
+      // Extract title
+      const title = (doc.querySelector("title")?.textContent || "").trim() ||
+        document.title;
+
+      // Locate content container
+      const fetchedContentEl =
+        doc.querySelector("[data-content]") || doc.body || doc.documentElement;
+
+      // Build content HTML without inline scripts/styles (they are handled separately)
+      const contentClone = fetchedContentEl.cloneNode(true);
+      contentClone.querySelectorAll("script, style").forEach((el) => el.remove());
+      const content = contentClone.innerHTML;
+
+      // Collect styles from head
+      const headStyles = [];
+      doc
+        .querySelectorAll('head link[rel="stylesheet"]')
+        .forEach((link) => {
+          headStyles.push({
+            type: "style",
+            href: link.href,
+            id: link.id || undefined,
+          });
+        });
+      doc.querySelectorAll("head style").forEach((style) => {
+        headStyles.push({
+          type: "inline-style",
+          content: style.textContent || "",
+          id: style.id || undefined,
+        });
+      });
+
+      // Collect styles from within content
+      const contentStyles = [];
+      fetchedContentEl.querySelectorAll("style").forEach((style) => {
+        contentStyles.push({
+          type: "inline-style",
+          content: style.textContent || "",
+          id: style.id || undefined,
+        });
+      });
+
+      // Collect external scripts (head + body)
+      const externalScripts = [];
+      doc.querySelectorAll("script[src]").forEach((s) => {
+        externalScripts.push({
+          type: "script",
+          src: s.src,
+          async: !!s.async,
+          defer: !!s.defer,
+          id: s.id || undefined,
+          scriptType: s.type || undefined,
+        });
+      });
+
+      // Collect inline scripts from within content only (execute later in order)
+      const inlineScripts = [];
+      fetchedContentEl
+        .querySelectorAll("script:not([src])")
+        .forEach((script) => {
+          inlineScripts.push(script.textContent || "");
+        });
+
+      const pageData = {
+        title,
+        content,
+        headStyles,
+        contentStyles,
+        externalScripts,
+        inlineScripts,
+      };
+
+      // Cache the result
+      this.cache.set(absoluteUrl, { data: pageData, ts: Date.now() });
+      return pageData;
     } catch (error) {
       await this.handleError("fetchError", error, { url });
       throw error;
@@ -148,7 +250,7 @@ class Router {
   }
 
   async loadResource(resource, isPageStyle = false) {
-    // Modify loadResource to add data attributes for style tracking
+    // Modify loadResource to add data attributes for style tracking & dedupe
     return new Promise((resolve, reject) => {
       try {
         // Remove existing element with same ID if it exists
@@ -157,6 +259,22 @@ class Router {
           if (existing) {
             existing.remove();
           }
+        }
+
+        // Build a resource key for deduplication (skip for page-specific styles)
+        let resourceKey = null;
+        if (resource.type === "script" && resource.src) {
+          resourceKey = `script:${resource.src}`;
+        } else if (resource.type === "style" && resource.href) {
+          resourceKey = `style:${resource.href}`;
+        } else if (resource.type === "inline-style" && resource.content) {
+          resourceKey = `inline-style:${resource.content}`;
+        }
+
+        if (!isPageStyle && resourceKey && this.loadedResources.has(resourceKey)) {
+          // Already loaded
+          resolve();
+          return;
         }
 
         if (resource.type === "inline-style") {
@@ -171,7 +289,7 @@ class Router {
           );
 
           document.head.appendChild(style);
-          this.loadedResources.add(resource.content);
+          if (!isPageStyle && resourceKey) this.loadedResources.add(resourceKey);
           resolve();
           return;
         }
@@ -194,6 +312,7 @@ class Router {
           element.src = resource.src;
           element.async = resource.async;
           element.defer = resource.defer;
+          if (resource.scriptType) element.type = resource.scriptType;
         } else if (resource.type === "style") {
           element = document.createElement("link");
           if (resource.id) element.id = resource.id;
@@ -209,9 +328,7 @@ class Router {
 
         element.onload = () => {
           clearTimeout(timeout);
-          this.loadedResources.add(
-            resource.src || resource.href || resource.content
-          );
+          if (!isPageStyle && resourceKey) this.loadedResources.add(resourceKey);
           resolve();
         };
         element.onerror = (error) => {
@@ -239,6 +356,18 @@ class Router {
         if (result === false) return; // Middleware cancelled navigation
       }
 
+      // Save current entry scroll position before navigating away
+      if (this.options.preserveScroll) {
+        try {
+          const currentState = history.state || {};
+          history.replaceState(
+            { ...currentState, url: window.location.href, scrollY: window.scrollY },
+            document.title,
+            window.location.href
+          );
+        } catch {}
+      }
+
       const currentContent = document.querySelector("[data-content]");
       if (this.options.animations && currentContent) {
         currentContent.classList.add("transitioning");
@@ -250,39 +379,12 @@ class Router {
       // Update the page title
       document.title = pageData.title;
 
-      // Clean up old page-specific styles
-      const oldStyles = document.querySelectorAll(
-        "style[data-page-style], link[data-page-style]"
-      );
-      oldStyles.forEach((style) => style.remove());
-      // Comprehensive style cleanup
-      const removePageSpecificStyles = () => {
-        // Remove all page-specific styles and previously loaded dynamic styles
-        const stylesToRemove = [
-          "style[data-page-style]", // Inline styles from previous page
-          "link[data-page-style]", // Stylesheet links from previous page
-          "style[data-dynamic-style]", // Any dynamically added styles
-          "link[data-dynamic-style]", // Any dynamically added stylesheet links
-        ];
-
-        document
-          .querySelectorAll(stylesToRemove.join(", "))
-          .forEach((style) => {
-            style.remove();
-          });
-
-        // Optional: Clear loaded resources tracking for styles
-        this.loadedResources = new Set(
-          Array.from(this.loadedResources).filter(
-            (resource) =>
-              !resource.includes("data-page-style") &&
-              !resource.includes("data-dynamic-style")
-          )
-        );
-      };
-
-      // Call style cleanup before loading new resources
-      removePageSpecificStyles();
+      // Clean up old page-specific styles (do not touch persistent resources)
+      document
+        .querySelectorAll(
+          "style[data-page-style], link[data-page-style], style[data-dynamic-style], link[data-dynamic-style]"
+        )
+        .forEach((el) => el.remove());
 
       // Load all resources first
       const resourcePromises = [
@@ -314,6 +416,16 @@ class Router {
         if (this.options.animations) {
           currentContent.classList.remove("transitioning");
         }
+
+        // Scroll handling
+        if (this.options.preserveScroll) {
+          if (typeof this.pendingScrollY === "number") {
+            window.scrollTo(0, this.pendingScrollY);
+            this.pendingScrollY = undefined;
+          } else {
+            window.scrollTo(0, 0);
+          }
+        }
       } else {
         console.error("No [data-content] element found");
         // window.location.href = url; // Fallback to regular navigation
@@ -322,12 +434,32 @@ class Router {
 
       // Update browser history
       if (addToHistory) {
-        window.history.pushState({ url }, pageData.title, url);
+        const state = { url, scrollY: this.options.preserveScroll ? 0 : undefined };
+        window.history.pushState(state, pageData.title, url);
       }
 
-      // Re-initialize components
-      if (window.ReactExpress) {
-        window.ReactExpress.initializeState();
+      // Re-initialize state and components for new content
+      try {
+        if (window.ReactExpress && typeof window.ReactExpress.initializeState === 'function') {
+          window.ReactExpress.initializeState();
+        }
+      } catch (e) {
+        try {
+          window.ReactExpress &&
+            window.ReactExpress.ErrorOverlay &&
+            window.ReactExpress.ErrorOverlay.log(e, { type: 'router-init', phase: 'state' });
+        } catch {}
+      }
+      try {
+        if (window.ReactExpress && typeof window.ReactExpress.initializeComponents === 'function') {
+          window.ReactExpress.initializeComponents(currentContent);
+        }
+      } catch (e) {
+        try {
+          window.ReactExpress &&
+            window.ReactExpress.ErrorOverlay &&
+            window.ReactExpress.ErrorOverlay.log(e, { type: 'router-init', phase: 'components' });
+        } catch {}
       }
 
       // Re-initialize prefetching for new content

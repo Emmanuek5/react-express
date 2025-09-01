@@ -1,40 +1,37 @@
 # Hot Module Reloading (HMR)
 
-The HMR module provides hot module reloading capabilities for React Express applications, enabling instant updates without full page reloads.
+The HMR module updates only the application container rather than reloading the whole page, preserving user context and minimizing jank. It integrates with the unified Hooks + VDOM architecture.
 
 ## Features
 
-- Live page updates
-- Form state preservation
-- Scroll position retention
-- Script re-execution
-- Error recovery
-- Suspense compatibility
+- Container-scoped patching (no full-body replace)
+- Form state preservation (value/checked/selection)
+- Focus and window scroll preservation
+- Stylesheet hot-swap (cache-busted href)
+- Debounced updates (server + client)
+- Safer script handling (skip boot/HMR scripts)
+- Custom update listeners
+- Error overlay (dev-only)
+- Dev-only placeholder route with path sanitization
 
 ## API Reference
 
 ### HMR Initialization
 
-```javascript
+```js
 initHMR(socket)
 ```
 
-Initializes the HMR system with a WebSocket connection.
+Initializes HMR with a Socket.io connection. In dev, React Express injects this automatically when `hmr: true`.
 
 ### Events
 
-#### `hmr:update`
-Triggered when a file change is detected:
-```javascript
-socket.on("hmr:update", async (data) => {
-  // Handle update
-});
-```
+- `hmr:update` (internal): emitted by the server (debounced) when a file changes.
+- `hmr:updated`: dispatched on `window` when the client finishes processing an update.
 
-#### `hmr:updated`
-Dispatched after successful update:
-```javascript
-window.addEventListener("hmr:updated", () => {
+```js
+window.addEventListener('hmr:updated', (e) => {
+  const { success, path, error } = e.detail;
   // Handle post-update tasks
 });
 ```
@@ -43,82 +40,108 @@ window.addEventListener("hmr:updated", () => {
 
 The HMR module automatically preserves:
 
-1. Form input values
-2. Focus states
-3. Scroll positions
-4. Interactive element states
+1. Form input values (value, checked, selection for text/textarea)
+2. Focused element (by id or name) and selection range
+3. Window scroll position
 
 ### Update Process
 
-1. Fetch new content
-2. Parse HTML
-3. Preserve states
-4. Update DOM
-5. Re-run scripts
-6. Restore states
+1. Fetch placeholder HTML for the current route (dev-only endpoint)
+2. Parse HTML and select the root container
+3. Preserve state, focus, and scroll
+4. Patch only the root container’s inner HTML
+5. Re-run scripts inside the container (skip boot/HMR)
+6. Hot-swap stylesheets
+7. Restore state, focus, and scroll
+8. Dispatch `hmr:updated`
 
 ### Error Handling
 
-The module includes fallback mechanisms:
+The module includes non-blocking mechanisms:
 
-1. Console error logging
-2. Full page reload fallback
+1. Console error logging (proxied into the Error Overlay)
+2. Error Overlay queue with next/prev navigation (no auto reload)
 3. Network error handling
 4. Parse error handling
 
+#### Error Overlay
+
+Provides a non-blocking UI for runtime and HMR errors in development.
+
+- Features:
+  - Queues errors (max 200) with deduplication
+  - Next/Prev navigation and counter
+  - Keyboard: Left/Right to navigate, Escape to close
+  - Global listeners: `error`, `unhandledrejection`, and `hmr:updated`
+  - Does not reload the page; app continues running
+
+- Public API (dev only):
+```js
+// Show overlay if hidden
+ReactExpress.ErrorOverlay.show()
+
+// Log error into the queue
+ReactExpress.ErrorOverlay.log(new Error('msg'), { type: 'custom' })
+
+// Hide overlay
+ReactExpress.ErrorOverlay.hide()
+
+// Navigate
+ReactExpress.ErrorOverlay.next()
+ReactExpress.ErrorOverlay.prev()
+
+// Clear queue
+ReactExpress.ErrorOverlay.clear()
+```
+
+Overlay activation is gated by `window.ReactExpress.__DEV__` which is set automatically when `hmr` is enabled on the server.
+
 ## Integration
 
-### Server-side Setup
+#### Server-side Setup
 
-```javascript
-const hmr = reactExpress({
-  hmr: true,
-  // other options...
+```ts
+const plugin = reactExpress({
+  hmr: process.env.NODE_ENV !== 'production',
+  viewsDir: 'views'
 });
 ```
 
-### Client-side Setup
+The server mounts a dev-only placeholder route `GET /__react-express/placeholder/*` and emits debounced `hmr:update` events via Socket.io. Paths are sanitized to remain within `viewsDir`.
 
-```html
-<!-- Auto-initialized with React Express -->
-<script src="/__react-express/hmr.js"></script>
-```
+#### Client-side Setup
+
+No manual setup is required. In dev, React Express injects the boot script, initializes state, loaders, and calls `ReactExpress.initHMR(socket)`.
 
 ### Headers
 
-The module uses custom headers for HMR requests:
-```javascript
-headers: {
-  "X-HMR-Request": "true"
-}
+HMR fetch requests add a custom header:
+```js
+{ 'X-HMR-Request': 'true' }
 ```
 
 ## Best Practices
 
-1. Development Setup:
-   - Enable HMR in development only
-   - Configure appropriate file watching
-   - Set up proper WebSocket connections
+1. **Development Setup**
+   - Enable HMR only in development
+   - Keep your templates under a single `viewsDir`
+   - Use the default debounce (or increase for noisy setups)
 
-2. State Management:
-   - Use proper state containers
-   - Implement state rehydration
-   - Handle complex state carefully
+2. **State Management**
+   - Let Hooks/VDOM drive UI; HMR patches markup but state comes from hooks
+   - Avoid storing ephemeral UI state in templates
 
-3. Error Handling:
-   - Implement proper error boundaries
-   - Provide fallback content
-   - Log errors appropriately
+3. **Error Handling**
+   - Add error boundaries
+   - Listen for `hmr:updated` details to surface errors
 
-4. Performance:
-   - Optimize update frequency
-   - Handle large DOM trees efficiently
-   - Manage script re-execution carefully
+4. **Performance**
+   - Scope updates to a root container (add `data-react-root` if needed)
+   - Prefer VDOM-rendered sections to minimize DOM thrash
 
-5. Security:
-   - Disable HMR in production
-   - Validate WebSocket connections
-   - Sanitize updated content
+5. **Security**
+   - HMR is disabled in production
+   - Placeholder paths are normalized and restricted to `viewsDir`
 
 ## Troubleshooting
 

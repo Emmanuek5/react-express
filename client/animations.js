@@ -204,7 +204,11 @@ class AnimationManager {
   }
 }
 
-// Create singleton instance
-const animations = new AnimationManager();
+// Create idempotent singleton instance across HMR
+window.ReactExpress = window.ReactExpress || {};
+const animations =
+  window.ReactExpress.animations instanceof AnimationManager
+    ? window.ReactExpress.animations
+    : new AnimationManager();
 
-ReactExpress.animations = animations;
+window.ReactExpress.animations = animations;

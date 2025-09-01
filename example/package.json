@@ -1,0 +1,22 @@
+{
+  "name": "example",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run index.ts",
+    "start": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "react-express": "link:react-express"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.18.3",
+    "socket.io": "^4.8.1"
+  }
+}

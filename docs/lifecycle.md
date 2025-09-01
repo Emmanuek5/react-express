@@ -26,6 +26,25 @@ class MyComponent extends ReactExpress.Component {
 }
 ```
 
+### Initialization
+
+- Components are auto-initialized at DOM load for any element with `data-component`.
+- The value of `data-component` maps to a global constructor on `window`:
+  - `data-component="todo-list"` resolves to `window.TodoList` (kebab-case to PascalCase), with fallbacks to exact and Capitalized names.
+- Dynamically added content is observed; any new `[data-component]` nodes (and nested ones) are initialized automatically.
+- Removed nodes (and nested components) are automatically unmounted with `componentWillUnmount()`.
+
+Manual initialization when you inject HTML dynamically:
+
+```html
+<div id="container"></div>
+<script>
+  container.innerHTML = '<div data-component="todo-list"></div>';
+  ReactExpress.initializeComponents(container); // initialize within container
+  // Equivalent to waiting for the MutationObserver, but immediate
+</script>
+```
+
 ### Lifecycle Methods
 
 #### `componentDidMount()`
@@ -79,6 +98,12 @@ Access in component:
 ```javascript
 this.refs.myButton.addEventListener('click', this.handleClick);
 ```
+
+### Notes on Updates
+
+- `render()` replaces component innerHTML each update. Re-attach any listeners in `componentDidMount`/`componentDidUpdate`.
+- Props come from `data-prop-*` attributes and are strings; convert as needed (e.g., `parseInt`).
+- Changing `data-prop-*` attributes does not automatically trigger an update; call `setState(...)` to re-render with new props, or re-initialize the component as needed.
 
 ## Examples
 

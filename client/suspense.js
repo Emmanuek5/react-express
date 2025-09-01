@@ -41,10 +41,17 @@ class LoaderManager {
 
   static init() {
     if (!this.#styleInjected) {
-      const style = document.createElement("style");
-      style.textContent = this.styles;
-      document.head.appendChild(style);
-      this.#styleInjected = true;
+      // Idempotent style injection across HMR
+      const existing = document.getElementById("react-express-loader-style");
+      if (existing) {
+        this.#styleInjected = true;
+      } else {
+        const style = document.createElement("style");
+        style.id = "react-express-loader-style";
+        style.textContent = this.styles;
+        document.head.appendChild(style);
+        this.#styleInjected = true;
+      }
     }
 
     this.setupMutationObserver();
@@ -52,6 +59,9 @@ class LoaderManager {
   }
 
   static setupMutationObserver() {
+    const global = (window.ReactExpress = window.ReactExpress || {});
+    if (global.__suspenseObserver) return; // avoid duplicates across HMR
+
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
@@ -72,6 +82,8 @@ class LoaderManager {
       childList: true,
       subtree: true,
     });
+
+    global.__suspenseObserver = observer;
   }
 
   static processContainers() {
@@ -104,8 +116,12 @@ class LoaderManager {
         return;
       }
 
+      // Important: compute placeholder FIRST. getPlaceholder may remove an inline
+      // [data-suspense-placeholder] from the container so it doesn't appear after load.
+      // Snapshot the template AFTER that mutation to avoid re-introducing the loader.
+      const placeholderHTML = this.getPlaceholder(container);
       container._originalContent = container.innerHTML;
-      container.innerHTML = this.getPlaceholder(container);
+      container.innerHTML = placeholderHTML;
 
       const data = await this.fetchWithRetry(apiEndpoint);
       this.setCachedData(cacheKey, data, cacheDuration);
@@ -248,6 +264,16 @@ class LoaderManager {
       new CustomEvent("content-error", { detail: error })
     );
     console.error("Loader Manager error:", error);
+
+    // Log to Error Overlay (non-blocking, dev only)
+    try {
+      window.ReactExpress &&
+        window.ReactExpress.ErrorOverlay &&
+        window.ReactExpress.ErrorOverlay.log(error, {
+          type: "suspense",
+          api: container.getAttribute("data-api"),
+        });
+    } catch {}
   }
 
   getNestedValue(obj, path) {
@@ -267,10 +293,82 @@ class LoaderManager {
       this.#cache.clear();
     }
   }
+
+  // --- HMR/state utilities ---
+  static __adoptState(state) {
+    try {
+      if (!state) return;
+      if (state.cache instanceof Map) this.#cache = state.cache;
+      if (state.styleInjected) this.#styleInjected = true;
+    } catch {}
+  }
+
+  static __exportState() {
+    return { cache: this.#cache, styleInjected: this.#styleInjected };
+  }
+
+  static peekCache(key) {
+    const cacheItem = this.#cache.get(key);
+    if (!cacheItem) return null;
+    const { data, expiry } = cacheItem;
+    if (Date.now() > expiry) {
+      this.#cache.delete(key);
+      return null;
+    }
+    return data;
+  }
 }
 
-// Initialize on DOM load
-document.addEventListener("DOMContentLoaded", () => LoaderManager.init());
+// Idempotent init across HMR and adopt persisted state
+window.ReactExpress = window.ReactExpress || {};
+if (window.ReactExpress.__suspenseState) {
+  LoaderManager.__adoptState(window.ReactExpress.__suspenseState);
+}
+
+if (!window.ReactExpress.__suspenseInit) {
+  window.ReactExpress.__suspenseInit = true;
+  const start = () => {
+    LoaderManager.init();
+    window.ReactExpress.__suspenseState = LoaderManager.__exportState();
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+}
+
+// HMR: re-render containers from cache (no refetch) after successful patch
+if (!window.ReactExpress.__suspenseHmrHook) {
+  window.ReactExpress.__suspenseHmrHook = true;
+  window.addEventListener("hmr:updated", (e) => {
+    const detail = (e && e.detail) || {};
+    if (detail.success) {
+      document.querySelectorAll("[data-suspense]").forEach((container) => {
+        const mgr = LoaderManager.getInstance(container);
+        const apiEndpoint = container.getAttribute("data-api");
+        if (!apiEndpoint) return;
+        const cacheKey =
+          container.getAttribute("data-cache-key") || apiEndpoint;
+        const cached = LoaderManager.peekCache(cacheKey);
+        if (cached) {
+          // Re-render using the latest template without refetching
+          container._originalContent = container.innerHTML;
+          mgr
+            .renderContent(container, cached)
+            .then(() => {
+              container.setAttribute("data-loaded", "true");
+              container.setAttribute("data-processed", "true");
+            })
+            .catch((err) => mgr.handleError(container, err));
+        } else if (!container.hasAttribute("data-processed")) {
+          mgr.processContainer(container);
+        }
+      });
+      window.ReactExpress.__suspenseState = LoaderManager.__exportState();
+    }
+  });
+}
 
 // Export for module environments
 if (typeof module !== "undefined" && module.exports) {

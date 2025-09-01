@@ -41,7 +41,7 @@ class ErrorBoundary {
           try {
             options.render(state, el);
           } catch (error) {
-            this.handleError(comp, error);
+            this.handleError(component, error);
           }
         }
       },
@@ -60,6 +60,11 @@ class ErrorBoundary {
       }
     }
     console.error("Error caught by boundary:", error);
+    try {
+      window.ReactExpress &&
+        window.ReactExpress.ErrorOverlay &&
+        window.ReactExpress.ErrorOverlay.log(error, { type: 'boundary' });
+    } catch {}
   }
 }
 

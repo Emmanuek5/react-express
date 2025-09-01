@@ -1,12 +1,19 @@
 class VirtualDOM {
   constructor() {
-    this.currentTree = null;
+    // Keep a separate virtual tree per container
+    this.trees = new WeakMap(); // container -> vnode
+    // Batch renders per microtask
+    this.queue = new Map(); // container -> latest vnode
+    this.scheduled = false;
   }
 
   createElement(type, props = {}, ...children) {
+    const flat = children
+      .flat()
+      .filter((c) => c !== null && c !== undefined && c !== false && c !== true);
     return {
       type,
-      props: { ...props, children: children.flat() },
+      props: { ...props, children: flat },
     };
   }
 
@@ -22,6 +29,12 @@ class VirtualDOM {
       if (name === "children") return;
       if (name.startsWith("on")) {
         element.addEventListener(name.toLowerCase().slice(2), value);
+      } else if (name === 'className') {
+        element.setAttribute('class', value);
+      } else if (name === 'style' && value && typeof value === 'object') {
+        element.setAttribute('style', this._styleToString(value));
+      } else if (typeof value === 'boolean') {
+        if (value) element.setAttribute(name, "");
       } else {
         element.setAttribute(name, value);
       }
@@ -94,7 +107,8 @@ class VirtualDOM {
             oldProps[key]
           );
         } else {
-          element.removeAttribute(key);
+          const attr = key === 'className' ? 'class' : key;
+          element.removeAttribute(attr);
         }
       }
     });
@@ -112,24 +126,94 @@ class VirtualDOM {
           }
           element.addEventListener(key.toLowerCase().slice(2), value);
         } else {
-          element.setAttribute(key, value);
+          const attr = key === 'className' ? 'class' : key;
+          if (attr === 'style' && value && typeof value === 'object') {
+            element.setAttribute('style', this._styleToString(value));
+          } else if (typeof value === 'boolean') {
+            if (value) element.setAttribute(attr, ""); else element.removeAttribute(attr);
+          } else {
+            element.setAttribute(attr, value);
+          }
         }
       }
     });
   }
 
-  render(vnode, container) {
-    if (!this.currentTree) {
-      // First render
-      this.currentTree = vnode;
-      container.appendChild(this.createDOMElement(vnode));
+  render(vnode, container, options = {}) {
+    // Queue and batch renders by container
+    this.queue.set(container, vnode);
+    if (options && options.sync) {
+      this._flush();
     } else {
-      // Subsequent renders - perform diffing
-      this.diff(this.currentTree, vnode, container);
-      this.currentTree = vnode;
+      this._schedule();
     }
   }
+
+  _schedule() {
+    if (this.scheduled) return;
+    this.scheduled = true;
+    queueMicrotask(() => this._flush());
+  }
+
+  _flush() {
+    if (!this.queue.size) { this.scheduled = false; return; }
+    const entries = Array.from(this.queue.entries());
+    this.queue.clear();
+    this.scheduled = false;
+    for (const [container, vnode] of entries) {
+      this._commit(container, vnode);
+    }
+  }
+
+  _commit(container, vnode) {
+    const prev = this.trees.get(container);
+
+    // Initial render clears SSR content
+    if (prev === undefined) {
+      container.innerHTML = '';
+    }
+
+    // Handle raw HTML vnodes by writing innerHTML directly
+    if (this._isRaw(vnode)) {
+      container.innerHTML = vnode.__raw || '';
+      this.trees.set(container, vnode);
+      return;
+    }
+
+    if (prev === undefined) {
+      container.appendChild(this.createDOMElement(vnode));
+      this.trees.set(container, vnode);
+      return;
+    }
+
+    if (this._isRaw(prev)) {
+      // Transition from raw -> vnode: clear and rebuild
+      container.innerHTML = '';
+      container.appendChild(this.createDOMElement(vnode));
+      this.trees.set(container, vnode);
+      return;
+    }
+
+    // Diff existing tree
+    this.diff(prev, vnode, container);
+    this.trees.set(container, vnode);
+  }
+
+  _isRaw(vnode) {
+    return vnode && typeof vnode === 'object' && Object.prototype.hasOwnProperty.call(vnode, '__raw');
+  }
+
+  raw(html) {
+    return { __raw: String(html ?? '') };
+  }
+
+  _styleToString(obj) {
+    return Object.entries(obj)
+      .map(([k, v]) => `${k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}:${v}`)
+      .join(';');
+  }
 }
+
 
 // Initialize ReactExpress virtual DOM
 window.ReactExpress = window.ReactExpress || {};

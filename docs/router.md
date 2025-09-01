@@ -15,6 +15,18 @@ The Router module provides advanced client-side routing capabilities with prefet
 
 ## API Reference
 
+### Global Instance
+
+The router is auto-initialized and available as a singleton:
+
+```html
+<script>
+  // Use the global instance
+  const router = window.ReactExpress.router;
+  router.on('afterNavigate', (url) => console.log('navigated:', url));
+</script>
+```
+
 ### Router Configuration
 
 #### Constructor Options
@@ -22,7 +34,8 @@ The Router module provides advanced client-side routing capabilities with prefet
 const router = new Router({
   animations: true,           // Enable page transitions
   cacheTimeout: 300000,      // Cache timeout (5 minutes)
-  prefetchDelay: 100         // Delay between prefetch requests
+  prefetchDelay: 100,        // Delay between prefetch requests
+  preserveScroll: true       // Preserve/restore scroll on history navigation
 });
 ```
 
@@ -66,6 +79,16 @@ router.on('onError', (type, error, context) => {
 });
 ```
 
+#### Global DOM Event: `routeChanged`
+The router dispatches a global event after navigation:
+
+```javascript
+window.addEventListener('routeChanged', (e) => {
+  const { url, title } = e.detail;
+  // custom logic
+});
+```
+
 ### HTML Integration
 
 #### Data Attributes
@@ -82,6 +105,10 @@ Enables prefetching for links:
 <a href="/profile" prefetch>Profile</a>
 <a href="/settings" prefetch="visible">Settings</a>
 ```
+
+Notes:
+- `prefetch` (no value) = eager prefetch.
+- `prefetch="visible"` = prefetch when the link becomes visible in viewport.
 
 ### Important Implementation Requirements
 
@@ -151,6 +178,10 @@ The router implements an intelligent caching system:
 2. Resource caching
 3. Configurable timeout
 4. Automatic cache cleanup
+
+Details:
+- Pages are cached per absolute URL for up to `cacheTimeout` ms.
+- Prefetch uses the same cache to avoid duplicate network requests.
 
 ### Error Handling
 

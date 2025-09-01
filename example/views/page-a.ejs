@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page A - React-Express</title>
+    <style>
+      .page { padding: 24px; }
+      .muted { color: #666; font-size: 12px; }
+      .nav a { display: inline-block; margin-right: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid #e5e7eb; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div data-content class="page">
+      <h1>Page A</h1>
+      <p class="muted">This page was loaded by the Router without a full refresh.</p>
+      <div class="nav">
+        <a href="/" data-route>Home</a>
+        <a href="/page-b" data-route prefetch>Go to Page B</a>
+      </div>
+      <div id="aMount" style="margin-top:12px; padding:8px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;"></div>
+      <script>
+        // Render something via VDOM on Page A load
+        const h = window.ReactExpress.createElement;
+        const vnode = h('div', {}, h('strong', {}, 'Page A Mounted'), ' ✓');
+        window.ReactExpress.vdom.render(vnode, document.getElementById('aMount'));
+      </script>
+    </div>
+  </body>
+</html>

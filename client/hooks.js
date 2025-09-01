@@ -94,6 +94,7 @@ class ComponentManager {
       if (!this.stateBindings.has(key)) {
         this.stateBindings.set(key, {
           value: initialValue,
+          prev: undefined,
           elements: new Set(),
           formatters: new Map()
         });
@@ -108,13 +109,7 @@ class ComponentManager {
 
       const setState = (newValue) => {
         const value = typeof newValue === 'function' ? newValue(binding.value) : newValue;
-        binding.value = value;
-        
-        // Update all bound elements
-        this._updateBoundElements(key);
-
-        // Dispatch event for subscribers
-        this.eventBus.dispatchEvent(new CustomEvent(key, { detail: value }));
+        this._setBindingValue(key, value);
       };
 
       return [getState, setState];
@@ -124,7 +119,8 @@ class ComponentManager {
     bindState: (key, element, formatter) => {
       if (!this.stateBindings.has(key)) {
         this.stateBindings.set(key, {
-          value: null,
+          value: undefined,
+          prev: undefined,
           elements: new Set(),
           formatters: new Map()
         });
@@ -134,11 +130,16 @@ class ComponentManager {
       binding.elements.add(element);
       
       if (formatter) {
-        binding.formatters.set(element, formatter);
+        const resolved = this._resolveFormatter(formatter);
+        if (resolved) {
+          binding.formatters.set(element, resolved);
+        }
       }
 
-      // Initial update
-      this._updateElement(element, binding.value, formatter);
+      // Initial update (skip if no value yet to preserve SSR content)
+      if (binding.value !== undefined) {
+        this._updateElement(element, binding.value, binding.formatters.get(element));
+      }
 
       return () => {
         binding.elements.delete(element);
@@ -209,6 +210,26 @@ class ComponentManager {
       }
 
       return this.callbacks.get(key);
+    },
+
+    useReducer: (key, reducer, initialState) => {
+      if (!this.stateBindings.has(key)) {
+        this.stateBindings.set(key, {
+          value: initialState,
+          prev: undefined,
+          elements: new Set(),
+          formatters: new Map()
+        });
+        this._scanForStateBindings(key);
+      }
+
+      const getState = () => this.stateBindings.get(key).value;
+      const dispatch = (action) => {
+        const current = this.stateBindings.get(key).value;
+        const next = reducer(current, action);
+        this._setBindingValue(key, next);
+      };
+      return [getState, dispatch];
     }
   };
 
@@ -218,12 +239,38 @@ class ComponentManager {
       const binding = this.stateBindings.get(key);
       if (!binding.elements.has(element)) {
         binding.elements.add(element);
-        const formatter = element.getAttribute('data-format');
-        if (formatter) {
-          try {
-            binding.formatters.set(element, new Function('value', `return ${formatter}`));
-          } catch (e) {
-            console.error(`Invalid formatter for ${key}:`, e);
+        const fmtAttr = element.getAttribute('data-format') || element.getAttribute('data-type');
+        if (fmtAttr) {
+          const resolved = this._resolveFormatter(fmtAttr);
+          if (resolved) {
+            binding.formatters.set(element, resolved);
+          }
+        }
+
+        // Attach input listeners for two-way binding (once per element)
+        if (!element.__reactExpressBound) {
+          if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
+            const type = (element.type || '').toLowerCase();
+            const handler = (e) => {
+              if (type === 'checkbox') {
+                const checkboxes = Array.from(document.querySelectorAll(`input[type="checkbox"][data-react-state="${key}"]`));
+                const isGroup = checkboxes.length > 1 || (element.hasAttribute('value'));
+                if (isGroup) {
+                  const values = checkboxes.filter(cb => cb.checked).map(cb => cb.value);
+                  this._setBindingValue(key, values);
+                } else {
+                  this._setBindingValue(key, element.checked);
+                }
+              } else if (type === 'radio') {
+                const selected = document.querySelector(`input[type="radio"][data-react-state="${key}"]:checked`);
+                this._setBindingValue(key, selected ? selected.value : null);
+              } else {
+                this._setBindingValue(key, element.value);
+              }
+            };
+            const eventName = (type === 'checkbox' || type === 'radio' || element.tagName === 'SELECT') ? 'change' : 'input';
+            element.addEventListener(eventName, handler);
+            element.__reactExpressBound = true;
           }
         }
       }
@@ -242,18 +289,81 @@ class ComponentManager {
     try {
       const displayValue = formatter ? formatter(value) : value;
       
-      if (element.tagName === 'INPUT') {
-        if (element.type === 'checkbox') {
-          element.checked = !!value;
+      const tag = element.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+        if (tag === 'INPUT' && element.type === 'checkbox') {
+          if (Array.isArray(value)) {
+            element.checked = value.includes(element.value);
+          } else {
+            element.checked = !!value;
+          }
+        } else if (tag === 'INPUT' && element.type === 'radio') {
+          // Radios are managed by event handlers; value reflects checked radio
+          // No direct update here to avoid mismatches
         } else {
           element.value = displayValue ?? '';
         }
       } else {
-        element.textContent = displayValue ?? '';
+        const vdom = window.ReactExpress && window.ReactExpress.vdom;
+        if (vdom) {
+          let vnode;
+          if (displayValue && typeof displayValue === 'object') {
+            if (displayValue.__html !== undefined) {
+              vnode = vdom.raw(displayValue.__html ?? '');
+            } else if (displayValue.type && displayValue.props) {
+              vnode = displayValue; // assume a vnode from createElement
+            } else if (Array.isArray(displayValue)) {
+              vnode = vdom.createElement('div', {}, ...displayValue);
+            } else {
+              vnode = String(displayValue);
+            }
+          } else {
+            vnode = displayValue ?? '';
+          }
+          vdom.render(vnode, element);
+        } else {
+          // Fallback if VDOM not available
+          if (displayValue && typeof displayValue === 'object' && displayValue.__html !== undefined) {
+            element.innerHTML = displayValue.__html ?? '';
+          } else {
+            element.textContent = displayValue ?? '';
+          }
+        }
       }
     } catch (e) {
       console.error('Error updating element:', e);
     }
+  }
+
+  _setBindingValue(key, value) {
+    const binding = this.stateBindings.get(key);
+    const prev = binding.value;
+    binding.prev = prev;
+    binding.value = value;
+    this._updateBoundElements(key);
+    this.eventBus.dispatchEvent(new CustomEvent(key, { detail: { value, previous: prev } }));
+  }
+
+  _resolveFormatter(formatter) {
+    try {
+      if (typeof formatter === 'function') return formatter;
+      if (typeof formatter === 'string') {
+        // Prefer registry
+        if (window.ReactExpress && window.ReactExpress.formatters && window.ReactExpress.formatters.has(formatter)) {
+          return window.ReactExpress.formatters.get(formatter);
+        }
+        // Global function name
+        if (typeof window[formatter] === 'function') return window[formatter];
+        // Inline JS expression support via js: prefix
+        if (formatter.startsWith('js:')) {
+          const expr = formatter.slice(3);
+          return new Function('value', `return (${expr})`);
+        }
+      }
+    } catch (e) {
+      console.error('Invalid formatter', formatter, e);
+    }
+    return null;
   }
 
   // Get component by element or ID
@@ -299,6 +409,41 @@ class ComponentManager {
 window.ReactExpress = window.ReactExpress || {};
 window.ReactExpress.components = new ComponentManager();
 window.ReactExpress.hooks = window.ReactExpress.components.hooks;
+
+// Formatter registry
+window.ReactExpress.formatters = window.ReactExpress.formatters || {
+  _map: new Map(),
+  add(name, fn) { this._map.set(name, fn); },
+  get(name) { return this._map.get(name); },
+  has(name) { return this._map.has(name); }
+};
+
+// Seed default formatters for back-compat with data-type
+(() => {
+  const fmts = window.ReactExpress.formatters;
+  if (!fmts.has('json')) {
+    // Return plain string so textContent preserves characters; CSS can use white-space: pre
+    fmts.add('json', (value) => (typeof value === 'undefined' ? '' : JSON.stringify(value, null, 2)));
+  }
+  if (!fmts.has('list')) {
+    fmts.add('list', (value) => ({ __html: Array.isArray(value) ? value.map((item) => `<li>${item}</li>`).join('') : '' }));
+  }
+  if (!fmts.has('todo')) {
+    fmts.add('todo', (value) => ({ __html: Array.isArray(value) ? value.map((todo) => `
+            <div class="todo-item">
+              <input type="checkbox" ${todo.completed ? 'checked' : ''}>
+              <span>${todo.text}</span>
+            </div>
+          `).join('') : '' }));
+  }
+})();
+
+// State change subscription helper
+window.ReactExpress.components.onStateChange = function(key, handler) {
+  const listener = (e) => handler(e.detail.value, e.detail.previous);
+  this.eventBus.addEventListener(key, listener);
+  return () => this.eventBus.removeEventListener(key, listener);
+};
 
 /* Example Usage:
 const counter = ReactExpress.components.createComponent(

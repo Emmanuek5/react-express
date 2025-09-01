@@ -75,26 +75,36 @@ export function reactExpress(options: ReactExpressOptions = {}) {
     app.use('/__react-express', express.static(path.join(__dirname, '../dist')));
     app.use('/__react-express', express.static(path.join(__dirname, '../client')));
 
-    // Handle placeholder template requests
-    app.get('/__react-express/placeholder/*', (req, res) => {
-      // Remove leading slash and /__react-express/placeholder prefix
-      const placeholderPath = req.path
-        .replace('/__react-express/placeholder', '')
-        .replace(/^\//, '');  // Remove leading slash
-      
-      const viewsDir = mergedOptions.viewsDir || app.get('views');
-      const fullPath = path.join(viewsDir, placeholderPath);
-      
-      // Render the placeholder template
-      app.render(placeholderPath, { ...mergedOptions, __reactExpressState: state }, (err, html) => {
-        if (err) {
-          console.error('Error loading placeholder:', err);
-          res.status(404).send('');
+    // Handle placeholder template requests (dev-only, HMR)
+    if (mergedOptions.hmr) {
+      app.get('/__react-express/placeholder/*', (req, res) => {
+        // Derive relative template path
+        const rawPath = req.path
+          .replace('/__react-express/placeholder', '')
+          .replace(/^\//, '');
+
+        const viewsDir = mergedOptions.viewsDir || app.get('views');
+        const resolvedViews = path.resolve(viewsDir);
+        const normalized = path.normalize(rawPath);
+        const fullPath = path.resolve(path.join(viewsDir, normalized));
+
+        // Prevent traversal outside viewsDir
+        if (!fullPath.startsWith(resolvedViews + path.sep) && fullPath !== resolvedViews) {
+          res.status(400).send('');
           return;
         }
-        res.send(html);
+
+        // Render the placeholder template
+        app.render(normalized, { ...mergedOptions, __reactExpressState: state }, (err, html) => {
+          if (err) {
+            console.error('Error loading placeholder:', err);
+            res.status(404).send('');
+            return;
+          }
+          res.send(html);
+        });
       });
-    });
+    }
 
     
 
@@ -136,20 +146,21 @@ export function reactExpress(options: ReactExpressOptions = {}) {
         // Inject our client-side code
         const injectedHtml = processedHtml.replace(
           '</head>', 
-          `<script src="/socket.io/socket.io.js" defer></script>
+          `${mergedOptions.hmr ? '<script src="/socket.io/socket.io.js" defer></script>' : ''}
           <script type="module" defer>
-            const socket = io();
+            // Dev flag for client (used by Error Overlay and dev-only features)
+            window.ReactExpress = window.ReactExpress || {};
+            window.ReactExpress.__DEV__ = ${mergedOptions.hmr ? 'true' : 'false'};
+
+            const socket = ${mergedOptions.hmr ? 'io()' : 'null'};
             
             // Import bundled ReactExpress
-            import  '/__react-express/react-express.bundle.js';
+            import '/__react-express/react-express.bundle.js';
             
             // Initialize components
             await ReactExpress.initState(socket);
             ReactExpress.LoaderManager.init();
-     
-            await ReactExpress.initHMR(socket);
-
-        
+            ${mergedOptions.hmr ? 'ReactExpress.initHMR(socket);' : ''}
           </script>\n</head>`
         );
 
@@ -204,12 +215,17 @@ export function reactExpress(options: ReactExpressOptions = {}) {
           persistent: true
         });
 
+        let hmrTimer: NodeJS.Timeout | null = null;
+        let lastPath: string | null = null;
         watcher.on('change', (filepath) => {
-          
-          io?.emit('hmr:update', {
-            path: path.relative(process.cwd(), filepath),
-            timestamp: Date.now()
-          });
+          lastPath = filepath;
+          if (hmrTimer) clearTimeout(hmrTimer);
+          hmrTimer = setTimeout(() => {
+            io?.emit('hmr:update', {
+              path: path.relative(process.cwd(), lastPath!),
+              timestamp: Date.now()
+            });
+          }, 100);
         });
       }
     }

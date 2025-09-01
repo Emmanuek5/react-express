@@ -14,6 +14,17 @@ class Store {
       this.mutations = { ...this.mutations, ...module.mutations };
       this.actions = { ...this.actions, ...module.actions };
     });
+
+    // Bridge: initialize hooks bindings for top-level keys with initial values
+    try {
+      const hooks = window.ReactExpress && window.ReactExpress.hooks;
+      if (hooks && typeof hooks.useState === 'function') {
+        Object.keys(this.state).forEach((key) => {
+          // Initialize binding value without forcing a render
+          hooks.useState(key, this.state[key]);
+        });
+      }
+    } catch (_) {}
   }
 
   commit(type, payload) {
@@ -24,6 +35,21 @@ class Store {
 
     const prevState = JSON.parse(JSON.stringify(this.state));
     mutation(this.state, payload);
+
+    // Bridge: forward all top-level keys into hooks to drive VDOM renders
+    try {
+      const hooks = window.ReactExpress && window.ReactExpress.hooks;
+      if (hooks && typeof hooks.useState === 'function') {
+        const prevKeys = Object.keys(prevState);
+        const currKeys = Object.keys(this.state);
+        const allKeys = new Set([...prevKeys, ...currKeys]);
+        allKeys.forEach((key) => {
+          const [, set] = hooks.useState(key, this.state[key]);
+          // Set to undefined if key was removed
+          set(currKeys.includes(key) ? this.state[key] : undefined);
+        });
+      }
+    } catch (_) {}
 
     // Notify subscribers
     this.subscribers.forEach((sub) => sub(this.state, prevState));
@@ -55,20 +81,14 @@ class Store {
   static plugin(store) {
     return {
       install(app) {
+        // Expose store without overriding hooks API
         app.store = store;
-        // Integrate with hooks system
-        app.hooks.useState = (selector) => {
-          const [state, setState] = window.ReactExpress.hooks.useState(
-            selector(store.state)
-          );
-
-          window.ReactExpress.hooks.useEffect(() => {
-            return store.subscribe((newState) => {
-              setState(selector(newState));
-            });
-          }, []);
-
-          return state;
+        // Optional helper for selecting state into a hooks binding
+        app.storeSelect = (key, selector = (s) => s[key]) => {
+          const hooks = window.ReactExpress.hooks;
+          const [get, set] = hooks.useState(key, selector(store.state));
+          hooks.useEffect(() => store.subscribe((s) => set(selector(s))), []);
+          return get;
         };
       },
     };

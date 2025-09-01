@@ -14,12 +14,32 @@ class FormSystem {
     // Use mutation observer with more efficient selector
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
+        // Added forms
         for (const node of mutation.addedNodes) {
-          if (
-            node.nodeType === Node.ELEMENT_NODE &&
-            node.matches("form[data-react-form]")
-          ) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (node.matches && node.matches("form[data-react-form]")) {
             this.setupForm(node);
+          }
+          // Also check subtree
+          if (node.querySelectorAll) {
+            node
+              .querySelectorAll("form[data-react-form]")
+              .forEach((form) => this.setupForm(form));
+          }
+        }
+
+        // Removed forms: clean up map to avoid stale entries
+        for (const node of mutation.removedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          const maybeCleanup = (el) => {
+            if (el && el.matches && el.matches("form[data-react-form]")) {
+              const formId = el.getAttribute("data-react-form");
+              if (this.forms.has(formId)) this.forms.delete(formId);
+            }
+          };
+          maybeCleanup(node);
+          if (node.querySelectorAll) {
+            node.querySelectorAll("form[data-react-form]").forEach(maybeCleanup);
           }
         }
       }
@@ -38,7 +58,11 @@ class FormSystem {
 
   setupForm(form) {
     const formId = form.getAttribute("data-react-form");
-    if (this.forms.has(formId)) return;
+    if (this.forms.has(formId)) {
+      const existing = this.forms.get(formId);
+      if (existing && existing.form === form) return; // already wired
+      // Rebind to new DOM element with same ID (e.g., after HMR patch)
+    }
 
     const config = this.parseFormConfig(form);
 
@@ -94,7 +118,7 @@ class FormSystem {
       }
 
       // Send request with flexible configuration
-      const response = await this.sendRequest(config, data);
+      const response = await this.sendRequest(config, data, form);
       const result = await response.json();
 
       // Handle successful submission
@@ -104,17 +128,27 @@ class FormSystem {
     }
   }
 
-  async sendRequest(config, data) {
+  async sendRequest(config, data, form) {
+    // Build body based on content type
+    let body;
+    if (config.contentType === "application/json") {
+      body = JSON.stringify(data);
+    } else if (config.contentType === "application/x-www-form-urlencoded") {
+      // Prefer URLSearchParams for classic forms
+      body = new URLSearchParams(new FormData(form));
+    } else {
+      // Fallback to multipart/form-data via FormData(form)
+      body = new FormData(form);
+    }
+
     const response = await fetch(config.action, {
       method: config.method,
       headers: {
-        "Content-Type": config.contentType,
+        // Let browser set boundary for FormData; only set when not FormData
+        ...(body instanceof FormData ? {} : { "Content-Type": config.contentType }),
         "X-Requested-With": "XMLHttpRequest",
       },
-      body:
-        config.contentType === "application/json"
-          ? JSON.stringify(data)
-          : new FormData(new FormData(), data),
+      body,
     });
 
     if (!response.ok) {
@@ -152,6 +186,17 @@ class FormSystem {
 
   handleSubmissionError(form, config, error, originalData) {
     console.error("Form submission error:", error);
+
+    // Also log to overlay in dev (non-blocking)
+    try {
+      window.ReactExpress &&
+        window.ReactExpress.ErrorOverlay &&
+        window.ReactExpress.ErrorOverlay.log(error, {
+          type: "form",
+          formId: form.getAttribute("data-react-form"),
+          action: config.action,
+        });
+    } catch {}
 
     // Trigger error callback
     this.triggerCallback(config.errorCallback, error);

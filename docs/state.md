@@ -1,6 +1,10 @@
-# State Management Module
+# State Management Module (Unified with Hooks)
 
-The state management module provides a reactive state management system for React Express applications. It enables real-time state synchronization between the client and server, with automatic DOM updates and subscription capabilities.
+The state management module provides a reactive state management system for React Express applications. It is now unified with `ReactExpress.hooks`, so calls to `ReactExpress.setState/getState/subscribe/batchUpdate` delegate to the hooks store and event bus. This ensures consistent behavior, two-way bindings, formatter support, and effect/memo reactivity across the app.
+
+Note:
+- The legacy `data-type` attribute remains supported for back-compat.
+- Prefer `data-format` with the formatter registry for display control.
 
 ## Features
 
@@ -16,7 +20,7 @@ The state management module provides a reactive state management system for Reac
 ### State Management
 
 #### `ReactExpress.setState(key, value, options = { sync: true })`
-Sets a state value and updates all subscribed elements.
+Sets a state value and updates all elements bound via hooks (`data-react-state`) and formatter rules. Triggers hooks reactivity (`useEffect`, `useMemo`, `onStateChange`).
 
 ```javascript
 ReactExpress.setState('counter', 5);
@@ -30,14 +34,14 @@ Parameters:
   - `sync` (boolean): Whether to sync with server (default: true)
 
 #### `ReactExpress.getState(key)`
-Retrieves the current value of a state.
+Retrieves the current value of a state from the hooks store.
 
 ```javascript
 const value = ReactExpress.getState('counter');
 ```
 
 #### `ReactExpress.subscribe(keys, callback)`
-Subscribes to changes in multiple state values.
+Subscribes to changes in multiple state values using the hooks event bus. The callback runs when any of the keys changes.
 
 ```javascript
 ReactExpress.subscribe(['counter', 'name'], ([count, name]) => {
@@ -70,47 +74,57 @@ Parameters:
 #### Data Attributes
 
 ##### `data-react-state`
-Binds an element to a state value:
+Binds an element to a state value (hooks-managed):
 
 ```html
 <div data-react-state="counter">0</div>
 <div data-react-state="user" data-type="json"></div>
 ```
 
-##### `data-type`
-Specifies how to render complex state values:
+##### `data-format` (recommended)
+Specifies how to render state values using the formatter registry or inline expressions:
 
-- `json`: Pretty-prints JSON objects
-- `list`: Renders arrays as list items
-- `todo`: Special rendering for todo items
+- Named formatter: `data-format="currency"`
+- Global function name: `data-format="myFormatterFn"`
+- Inline expression: `data-format="js:value * 2"`
 
-## Type-Specific Rendering
+##### `data-type` (back-compat)
+Legacy attribute that maps to built-in formatters:
 
-The state module includes specialized rendering for different data types:
+- `json`: Pretty-prints JSON (uses `textContent`; apply CSS `white-space: pre`)
+- `list`: Renders arrays as list items (`<li>`)
+- `todo`: Renders todo items
 
-### JSON Objects
+## Formatting and Display
+
+Use the formatter registry for consistent display formatting:
+
+```javascript
+ReactExpress.formatters.add('currency', (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v));
+```
+
+```html
+<div data-react-state="price" data-format="currency"></div>
+```
+
+Back-compat examples using `data-type`:
+
 ```html
 <div data-react-state="user" data-type="json"></div>
-```
-
-### Lists
-```html
 <ul data-react-state="items" data-type="list"></ul>
-```
-
-### Todo Items
-```html
 <div data-react-state="todos" data-type="todo"></div>
 ```
 
 ## Server Synchronization
 
-The state module automatically synchronizes with the server when enabled:
+The state module automatically synchronizes with the server when enabled. Incoming socket updates are applied through the hooks store, triggering all bindings and reactive hooks:
 
 1. Real-time updates via WebSocket
 2. Initial state loading on page load
 3. Batch updates for performance
 4. Error handling and recovery
+
+Tip: For local-only changes, pass `{ sync: false }` to `setState` or use a separate key for transient UI state.
 
 ## Best Practices
 

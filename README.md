@@ -2,7 +2,7 @@
 
 A TypeScript-based integration that brings React-like features to Express applications, providing a powerful and efficient way to build modern web applications.
 
-[📚 Full Documentation](https://react-express-docs.cloven.me/)
+[📚 Full Documentation](https://react-express-docs.pages.dev/)
 
 ## Why Use React Express?
 

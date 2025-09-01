@@ -1,41 +1,39 @@
 # State Management
 
-ReactExpress provides a powerful state management system inspired by Vuex/Redux patterns, combined with a reactive state system for efficient updates and computed properties.
+ReactExpress provides two complementary layers:
+
+- The hooks/VDOM layer (single rendering source of truth)
+- An optional Store facade (Vuex-like) that forwards state changes into hooks
+
+This unification ensures that all UI updates flow through the Virtual DOM renderer for batching and consistency.
 
 ## Store
 
-The Store provides centralized state management with mutations, actions, and modular architecture.
+The Store provides centralized state management (mutations, actions, modules) and forwards updates into `ReactExpress.hooks`, which drives the VDOM renderer. Treat the Store as an orchestrator; rendering still goes through hooks.
 
 ### Creating a Store
 
 ```javascript
 const store = ReactExpress.createStore({
-  state: {
-    count: 0,
-    todos: []
-  },
+  state: { count: 0, todos: [] },
   mutations: {
-    INCREMENT(state) {
-      state.count++
-    },
-    ADD_TODO(state, todo) {
-      state.todos.push(todo)
-    }
+    INCREMENT(state) { state.count++; },
+    ADD_TODO(state, todo) { state.todos.push(todo); }
   },
   actions: {
-    async fetchTodos({ state, commit }) {
-      const todos = await api.getTodos()
-      commit('ADD_TODO', todos)
+    async fetchTodos({ commit }) {
+      const todos = await api.getTodos();
+      commit('ADD_TODO', todos);
     }
   }
-})
+});
 ```
 
 ### Store API
 
 #### State
-- Access the reactive state object directly through `store.state`
-- State is automatically reactive and will trigger updates when modified through mutations
+- Access the reactive state object directly via `store.state`
+- Mutate state only via mutations; commits are forwarded into hooks so bound UI updates render via VDOM
 
 #### Mutations
 - Synchronous functions that directly modify state
@@ -52,42 +50,41 @@ const store = ReactExpress.createStore({
 - Each module can have its own state, mutations, and actions
 - Automatically namespaced under the module key
 
-### Integration with Components
+### Integration with Hooks/VDOM
 
-The store automatically integrates with the hooks system:
+Store commits update hooks state keys, which in turn update any `[data-react-state]` bindings and VDOM-rendered content.
+
+```html
+<button id="inc">+</button>
+<div data-react-state="count">0</div>
+```
 
 ```javascript
-function Counter() {
-  const count = ReactExpress.hooks.useState(state => state.count)
-  
-  return {
-    onClick: () => store.commit('INCREMENT'),
-    template: `<div>Count: ${count}</div>`
-  }
-}
+// Initialize a hooks binding for the key (Store constructor also does this)
+const [getCount] = ReactExpress.hooks.useState('count', store.state.count);
+
+// Commit through the store; hooks/VDOM will update the bound element
+document.getElementById('inc').addEventListener('click', () => {
+  store.commit('INCREMENT');
+});
 ```
 
 ## Reactive System
 
-The reactive system provides fine-grained reactivity for state management.
+The reactive system (`client/reactive-state.js`) provides fine-grained reactivity for computed values and watchers. It is independent but can be used to power store state.
 
 ### Creating Reactive State
 
 ```javascript
-const state = ReactExpress.reactive.createReactive({
-  count: 0,
-  message: 'Hello'
-})
+const state = ReactExpress.reactive.createReactive({ count: 0, message: 'Hello' });
 ```
 
 ### Computed Properties
 
-Create derived state that automatically updates:
+Create derived state with lazy recomputation when dependencies change:
 
 ```javascript
-const doubleCount = ReactExpress.reactive.computed(() => {
-  return state.count * 2
-})
+const doubleCount = ReactExpress.reactive.computed(() => state.count * 2);
 ```
 
 ### Watchers
@@ -95,14 +92,16 @@ const doubleCount = ReactExpress.reactive.computed(() => {
 Watch for state changes and react accordingly:
 
 ```javascript
-ReactExpress.reactive.watch(() => {
-  console.log('Count changed:', state.count)
-  // Return cleanup function if needed
-  return () => {
-    // Cleanup
-  }
-})
+const stop = ReactExpress.reactive.watch(() => {
+  console.log('Count changed:', state.count);
+  // Optional cleanup
+  return () => {/* cleanup */};
+});
 ```
+
+Notes:
+- Shallow reactivity: only top-level props on the reactive object are proxied.
+- Computed subscribers: reading only a computed inside a watcher will not subscribe to its deps; also read the underlying props or structure your watcher accordingly.
 
 ## Best Practices
 
@@ -121,14 +120,14 @@ ReactExpress.reactive.watch(() => {
    - Keep related state together
    - Use namespacing to avoid naming conflicts
 
-4. **Component Integration**
-   - Use `useState` hook for component state
-   - Avoid storing component-local state in the store
-   - Use computed properties for derived state
+4. **Hooks Integration**
+   - Use `ReactExpress.hooks.useState(key, initial)` for UI state
+   - Let the Store orchestrate domain state; it forwards changes into hooks
+   - Use computed properties for derived state (outside of hooks), or `useEffect` to derive another key
 
 ## Performance Considerations
 
-- The reactive system tracks dependencies automatically
-- Only affected components are updated when state changes
-- Computed properties are cached until dependencies change
-- Watchers are automatically cleaned up when components unmount
+- Hooks + VDOM batch DOM updates for minimal reflows
+- Store commits forward only top-level keys; structure state to avoid excessive fan-out
+- Reactive system caches computed values until marked stale
+- Clean up watchers to avoid memory leaks

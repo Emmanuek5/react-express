@@ -164,9 +164,14 @@ Bind state variables directly to DOM elements using the `data-react-state` attri
 ```
 
 ```javascript
-const [name, setName] = useState('John');
-// The input and div will automatically update when name changes
+const [getName, setName] = ReactExpress.hooks.useState('name', 'John');
+// Elements with data-react-state="name" will automatically reflect updates
 ```
+
+Two-way binding notes:
+- Inputs and selects automatically update the associated state key.
+- Checkbox groups bound to the same key produce an array of checked values.
+- Radio groups bound to the same key set the selected value.
 
 ### Formatted State Binding
 
@@ -178,9 +183,9 @@ Use the `data-format` attribute to specify how state values should be displayed:
 ```
 
 ```javascript
-// Define custom formatters
+// Define custom formatters (formatter registry)
 ReactExpress.formatters.add('dogYears', (value) => `${value * 7} dog years`);
-ReactExpress.formatters.add('currency', (value) => `$${value.toFixed(2)}`);
+ReactExpress.formatters.add('currency', (value) => `$${Number(value).toFixed(2)}`);
 ```
 
 ### Array State Binding
@@ -196,8 +201,8 @@ Bind array state to checkbox groups or multi-select elements:
 ```
 
 ```javascript
-const [interests, setInterests] = useState([]);
-// Checkboxes will automatically update the interests array
+const [getInterests, setInterests] = ReactExpress.hooks.useState('interests', []);
+// Checkboxes bound with data-react-state="interests" will update the array automatically
 ```
 
 ### Computed Values
@@ -211,31 +216,36 @@ Create computed values that automatically update when their dependencies change:
 ```
 
 ```javascript
-const [num1, setNum1] = useState(0);
-const [num2, setNum2] = useState(0);
-const sum = computed(() => num1 + num2);
+const [getNum1, setNum1] = ReactExpress.hooks.useState('num1', 0);
+const [getNum2, setNum2] = ReactExpress.hooks.useState('num2', 0);
+const [getSum, setSum] = ReactExpress.hooks.useState('sum', 0);
+
+// Recompute sum whenever num1 or num2 changes
+ReactExpress.hooks.useEffect(() => {
+  setSum((getNum1() || 0) + (getNum2() || 0));
+}, ['num1', 'num2']);
 ```
 
 ## Advanced Features
 
 ### Custom Bindings
 
-Create custom binding behaviors using the `bindState` function:
+Imperatively bind an element to state with an optional formatter (function name, global function, or `js:` expression):
 
 ```javascript
-bindState('customState', {
-  get: (state) => state.value,
-  set: (state, value) => ({ ...state, value }),
-  format: (value) => `Custom: ${value}`
-});
+const el = document.querySelector('#custom');
+ReactExpress.hooks.bindState('customState', el, 'formatterName'); // or (value) => `Custom: ${value}`
+
+// Alternatively, prefer declarative markup:
+// <div id="custom" data-react-state="customState" data-format="formatterName"></div>
 ```
 
 ### State Change Notifications
 
-Subscribe to state changes using the event bus:
+Subscribe to state changes using the event bus helper:
 
 ```javascript
-onStateChange('stateName', (newValue, oldValue) => {
+ReactExpress.components.onStateChange('stateName', (newValue, oldValue) => {
   // Handle state change
 });
 ```
@@ -262,18 +272,18 @@ ReactExpress.formatters.add('safe', (value) => {
 Perform side effects in your components:
 
 ```javascript
-// Basic effect that runs on every render
-useEffect(() => {
-  console.log('Component updated');
-});
+// Init-only effect (runs once)
+ReactExpress.hooks.useEffect(() => {
+  console.log('Initialized');
+}, []);
 
-// Effect with dependencies - only runs when dependencies change
-useEffect(() => {
-  document.title = `${name}'s Profile`;
-}, [name]);
+// Effect with dependencies - runs when listed state keys change
+ReactExpress.hooks.useEffect(() => {
+  document.title = `Profile: ${getName()}`;
+}, ['name']);
 
 // Effect with cleanup
-useEffect(() => {
+ReactExpress.hooks.useEffect(() => {
   const handler = (e) => handleResize(e);
   window.addEventListener('resize', handler);
   
@@ -284,7 +294,7 @@ useEffect(() => {
 }, []);
 
 // Async effects
-useEffect(() => {
+ReactExpress.hooks.useEffect(() => {
   async function fetchData() {
     const response = await fetch('/api/data');
     const data = await response.json();
@@ -300,22 +310,21 @@ Memoize expensive computations:
 
 ```javascript
 // Memoize expensive calculation
-const sortedList = useMemo(() => {
-  return items
-    .slice()
-    .sort((a, b) => b.priority - a.priority);
-}, [items]);
+const sortedList = ReactExpress.hooks.useMemo(() => {
+  const arr = (getItems() || []).slice();
+  return arr.sort((a, b) => b.priority - a.priority);
+}, ['items']);
 
 // Memoize complex object
-const memoizedValue = useMemo(() => ({
-  id: props.id,
-  computed: expensiveComputation(props.data)
-}), [props.id, props.data]);
+const memoizedValue = ReactExpress.hooks.useMemo(() => ({
+  id: getId(),
+  computed: expensiveComputation(getData())
+}), ['id', 'data']);
 
 // Prevent unnecessary re-renders of child components
-const memoizedCallback = useMemo(() => {
-  return () => handleClick(value);
-}, [value]);
+const memoizedCallback = ReactExpress.hooks.useMemo(() => {
+  return () => handleClick(getValue());
+}, ['value']);
 ```
 
 ### useRef
@@ -323,53 +332,26 @@ const memoizedCallback = useMemo(() => {
 Maintain mutable values across renders and access DOM elements:
 
 ```javascript
-// Reference DOM elements
-function TextInput() {
-  const inputRef = useRef(null);
-  
-  const focus = () => {
-    inputRef.current.focus();
-  };
-  
-  return (
-    <>
-      <input ref={inputRef} type="text" />
-      <button onClick={focus}>Focus Input</button>
-    </>
-  );
-}
+// Reference DOM elements (by id)
+const inputRef = ReactExpress.hooks.useRef('text-input');
+const focus = () => inputRef.current && inputRef.current.focus();
 
 // Store previous values
-function Counter() {
-  const [count, setCount] = useState(0);
-  const prevCountRef = useRef();
-  
-  useEffect(() => {
-    prevCountRef.current = count;
-  });
-  
-  return (
-    <div>
-      Current: {count}, Previous: {prevCountRef.current}
-    </div>
-  );
-}
+const [getCount, setCount] = ReactExpress.hooks.useState('count', 0);
+const prevCountRef = { current: undefined };
+ReactExpress.hooks.useEffect(() => {
+  prevCountRef.current = getCount();
+}, ['count']);
 
 // Store interval/timeout IDs
-function Timer() {
-  const [time, setTime] = useState(0);
-  const timerRef = useRef();
-  
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setTime(t => t + 1);
-    }, 1000);
-    
-    return () => clearInterval(timerRef.current);
-  }, []);
-  
-  return <div>Time: {time}</div>;
-}
+const [getTime, setTime] = ReactExpress.hooks.useState('time', 0);
+const timerRef = { current: null };
+ReactExpress.hooks.useEffect(() => {
+  timerRef.current = setInterval(() => {
+    setTime((t) => (t || 0) + 1);
+  }, 1000);
+  return () => clearInterval(timerRef.current);
+}, []);
 ```
 
 ### useCallback
@@ -378,34 +360,30 @@ Memoize functions to prevent unnecessary re-renders:
 
 ```javascript
 // Basic callback memoization
-const memoizedCallback = useCallback(
+const memoizedCallback = ReactExpress.hooks.useCallback(
   () => {
-    doSomething(a, b);
+    doSomething(getA(), getB());
   },
-  [a, b]
+  ['a', 'b']
 );
 
 // With event handlers
-const handleSubmit = useCallback((event) => {
+const handleSubmit = ReactExpress.hooks.useCallback((event) => {
   event.preventDefault();
-  submitForm(formData);
-}, [formData]);
+  submitForm(getFormData());
+}, ['formData']);
 
-// Optimizing child component renders
-function ParentComponent() {
-  const [items, setItems] = useState([]);
-  
-  const handleItemClick = useCallback((id) => {
-    setItems(prev => prev.filter(item => item.id !== id));
-  }, []);
-  
-  return (
-    <ItemList
-      items={items}
-      onItemClick={handleItemClick}
-    />
-  );
-}
+// Optimizing child-like interactions (DOM example)
+const [getItems, setItems] = ReactExpress.hooks.useState('items', []);
+const handleItemClick = ReactExpress.hooks.useCallback((id) => {
+  setItems((prev) => (prev || []).filter(item => item.id !== id));
+}, []);
+
+// Example: delegate clicks to remove items
+document.getElementById('item-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove-id]');
+  if (btn) handleItemClick(btn.getAttribute('data-remove-id'));
+});
 ```
 
 ### useReducer
@@ -417,9 +395,9 @@ Manage complex state logic with reducers:
 const reducer = (state, action) => {
   switch (action.type) {
     case 'INCREMENT':
-      return { count: state.count + 1 };
+      return { count: (state.count || 0) + 1 };
     case 'DECREMENT':
-      return { count: state.count - 1 };
+      return { count: (state.count || 0) - 1 };
     case 'RESET':
       return { count: 0 };
     default:
@@ -427,19 +405,13 @@ const reducer = (state, action) => {
   }
 };
 
-// Use reducer in component
-function Counter() {
-  const [state, dispatch] = useReducer(reducer, { count: 0 });
-  
-  return (
-    <>
-      Count: {state.count}
-      <button onClick={() => dispatch({ type: 'INCREMENT' })}>+</button>
-      <button onClick={() => dispatch({ type: 'DECREMENT' })}>-</button>
-      <button onClick={() => dispatch({ type: 'RESET' })}>Reset</button>
-    </>
-  );
-}
+// Use reducer with a state key
+const [getCounter, dispatch] = ReactExpress.hooks.useReducer('counter', reducer, { count: 0 });
+
+// Example usage
+document.getElementById('inc').addEventListener('click', () => dispatch({ type: 'INCREMENT' }));
+document.getElementById('dec').addEventListener('click', () => dispatch({ type: 'DECREMENT' }));
+document.getElementById('reset').addEventListener('click', () => dispatch({ type: 'RESET' }));
 ```
 
 ### Custom Hooks
@@ -447,67 +419,42 @@ function Counter() {
 Create reusable hooks by combining existing hooks:
 
 ```javascript
-// Custom hook for form handling
-function useForm(initialValues) {
-  const [values, setValues] = useState(initialValues);
-  const [errors, setErrors] = useState({});
-  
-  const handleChange = useCallback((e) => {
+// "Custom hook" pattern using ReactExpress.hooks: form handling helpers
+function makeFormHelpers(stateKey) {
+  const [getValues, setValues] = ReactExpress.hooks.useState(stateKey, {});
+  const [getErrors, setErrors] = ReactExpress.hooks.useState(`${stateKey}:errors`, {});
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setValues(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  }, []);
-  
-  const validate = useCallback(() => {
-    // Validation logic
+    setValues((prev) => ({ ...(prev || {}), [name]: value }));
+  };
+
+  const validate = () => {
+    const values = getValues() || {};
     const newErrors = {};
-    // ... validate values
+    // ... add validation logic populating newErrors
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [values]);
-  
+  };
+
   return {
-    values,
-    errors,
+    getValues,
+    getErrors,
     handleChange,
-    validate
+    validate,
   };
 }
 
-// Usage of custom hook
-function RegistrationForm() {
-  const {
-    values,
-    errors,
-    handleChange,
-    validate
-  } = useForm({
-    username: '',
-    email: '',
-    password: ''
-  });
-  
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (validate()) {
-      // Submit form
-    }
-  };
-  
-  return (
-    <form onSubmit={handleSubmit}>
-      <input
-        name="username"
-        value={values.username}
-        onChange={handleChange}
-      />
-      {errors.username && <span>{errors.username}</span>}
-      {/* ... other fields */}
-    </form>
-  );
-}
+// Usage (DOM example)
+const form = makeFormHelpers('formData');
+document.getElementById('my-form').addEventListener('input', form.handleChange);
+document.getElementById('my-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (form.validate()) {
+    const data = form.getValues();
+    // Submit data
+  }
+});
 ```
 
 ## Best Practices

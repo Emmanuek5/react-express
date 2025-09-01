@@ -4,14 +4,39 @@ window.ReactExpress = window.ReactExpress || {
   subscribers: new Map(),
 
   initializeState() {
-    // Initialize state elements
-    document.querySelectorAll("[data-react-state]").forEach((element) => {
+    // Bridge: bind all [data-react-state] elements via hooks
+    const hooks = window.ReactExpress.hooks;
+    const primeAndBind = (element) => {
       const key = element.getAttribute("data-react-state");
-      const value = this.state.get(key);
-      if (value !== undefined) {
-        updateElement(element, value);
-      }
-    });
+      if (!key) return;
+      // Prime binding so _scanForStateBindings attaches input listeners
+      const tag = (element.tagName || '').toUpperCase();
+      const initial = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT')
+        ? element.value
+        : element.textContent;
+      hooks.useState(key, initial);
+      // Delegate binding to hooks; formatters resolve via data-format
+      hooks.bindState(key, element);
+    };
+
+    document.querySelectorAll("[data-react-state]").forEach(primeAndBind);
+
+    // Observe for dynamically added nodes (router/suspense/HMR)
+    if (!window.ReactExpress.__stateObserver) {
+      const observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (!(node instanceof HTMLElement)) continue;
+            if (node.matches && node.matches('[data-react-state]')) primeAndBind(node);
+            if (node.querySelectorAll) {
+              node.querySelectorAll('[data-react-state]').forEach(primeAndBind);
+            }
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      window.ReactExpress.__stateObserver = observer;
+    }
   },
 
   subscribe(keys, callback, elementId = null) {
@@ -41,41 +66,35 @@ window.ReactExpress = window.ReactExpress || {
       attemptUpdate();
     };
 
+    // Bridge subscriptions through hooks event bus
+    const run = () => {
+      const values = keys.map((k) => window.ReactExpress.getState(k));
+      const result = callback(values);
+      if (elementId) updateTargetElement(result);
+    };
+
+    const unsubs = keys.map((k) =>
+      window.ReactExpress.components.onStateChange(k, () => run())
+    );
+
     this.subscribers.set(id, {
       keys,
       callback,
       elementId,
       updateElement: updateTargetElement,
+      unsubs,
     });
 
     // Initial call with current values
-    const values = keys.map((k) => this.state.get(k));
-    const result = callback(values);
-    updateTargetElement(result);
+    run();
 
     return id;
   },
 
   setState(key, value, options = { sync: false }) {
-    this.state.set(key, value);
-
-    // Update DOM elements with matching data-react-state
-    document
-      .querySelectorAll(`[data-react-state="${key}"]`)
-      .forEach((element) => updateElement(element, value));
-
-    // Update subscribers
-    this.subscribers.forEach(({ keys, callback, updateElement }) => {
-      if (keys.includes(key)) {
-        const values = keys.map((k) => this.state.get(k));
-        if (!callback || typeof callback !== "function") {
-          console.error("Invalid callback function for subscriber:", callback);
-          return;
-        }
-        const result = callback(values);
-        updateElement(result);
-      }
-    });
+    // Delegate state updates to hooks store
+    const [, set] = window.ReactExpress.hooks.useState(key, null);
+    set(value);
 
     // Sync with server if needed
     if (options.sync && socket) {
@@ -83,7 +102,9 @@ window.ReactExpress = window.ReactExpress || {
     }
   },
   getState(key) {
-    return this.state.get(key);
+    // Read via hooks store; ensure binding exists
+    const [get] = window.ReactExpress.hooks.useState(key, undefined);
+    return get();
   },
 
   batchUpdate(updates, options = { sync: true }) {

@@ -16,6 +16,8 @@ class Component {
     this.state = { ...this.state, ...nextState };
 
     if (this.shouldComponentUpdate(this.props, this.state, prevState)) {
+      // Provide correct prevState to componentDidUpdate
+      this._prevStateForUpdate = prevState;
       this.updateComponent();
     }
 
@@ -46,7 +48,9 @@ class Component {
 
   updateComponent() {
     const prevProps = { ...this.props };
-    const prevState = { ...this.state };
+    // Use prevState captured during setState if available
+    const prevState = this._prevStateForUpdate ?? { ...this.state };
+    delete this._prevStateForUpdate;
 
     // Update props
     this.props = this.getProps();
@@ -74,6 +78,7 @@ class Component {
   destroy() {
     this.componentWillUnmount();
     this.mounted = false;
+    this.refs = {};
   }
 }
 
@@ -132,18 +137,38 @@ document.addEventListener("DOMContentLoaded", () => {
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
-        if (node.nodeType === 1 && node.hasAttribute("data-component")) {
-          initializeComponent(node);
+        if (node.nodeType === 1) {
+          if (node.hasAttribute("data-component")) {
+            initializeComponent(node);
+          }
+          // Initialize any nested components within the added node
+          node
+            .querySelectorAll &&
+            node
+              .querySelectorAll("[data-component]")
+              .forEach((el) => initializeComponent(el));
         }
       });
 
       mutation.removedNodes.forEach((node) => {
-        if (node.nodeType === 1 && node.hasAttribute("data-component")) {
-          const component = componentRegistry.get(node);
-          if (component) {
-            component.destroy();
-            componentRegistry.delete(node);
+        if (node.nodeType === 1) {
+          const toCleanup = [];
+          if (node.hasAttribute && node.hasAttribute("data-component")) {
+            toCleanup.push(node);
           }
+          // Also cleanup nested components being removed
+          node.querySelectorAll &&
+            node
+              .querySelectorAll("[data-component]")
+              .forEach((el) => toCleanup.push(el));
+
+          toCleanup.forEach((el) => {
+            const component = componentRegistry.get(el);
+            if (component) {
+              component.destroy();
+              componentRegistry.delete(el);
+            }
+          });
         }
       });
     });
@@ -159,7 +184,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function initializeComponent(element) {
     const componentName = element.getAttribute("data-component");
-    const ComponentClass = window[componentName];
+    // Resolve global constructor by exact, PascalCase, or capitalized name
+    const resolveComponentClass = (name) => {
+      if (!name) return null;
+      const pascal = name
+        .split(/[-_]/)
+        .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join("");
+      const candidates = [name, pascal, name.charAt(0).toUpperCase() + name.slice(1)];
+      for (const n of candidates) {
+        if (window[n]) return window[n];
+      }
+      return null;
+    };
+
+    const ComponentClass = resolveComponentClass(componentName);
 
     if (ComponentClass && ComponentClass.prototype instanceof Component) {
       const component = new ComponentClass(element);
@@ -167,4 +206,10 @@ document.addEventListener("DOMContentLoaded", () => {
       component.updateComponent();
     }
   }
+
+  // Expose a manual initializer for dynamic content
+  window.ReactExpress.initializeComponents = (root = document) => {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll("[data-component]").forEach(initializeComponent);
+  };
 });

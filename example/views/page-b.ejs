@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page B - React-Express</title>
+    <style>
+      .page { padding: 24px; }
+      .muted { color: #666; font-size: 12px; }
+      .nav a { display: inline-block; margin-right: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid #e5e7eb; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div data-content class="page">
+      <h1>Page B</h1>
+      <p class="muted">Another router page. Try navigating back and forth to see scroll preservation and animations.</p>
+      <div class="nav">
+        <a href="/" data-route>Home</a>
+        <a href="/page-a" data-route prefetch>Go to Page A</a>
+      </div>
+      <div id="bMount" style="margin-top:12px; padding:8px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;"></div>
+      <script>
+        // Render something via VDOM on Page B load
+        const h = window.ReactExpress.createElement;
+        const vnode = h('div', {}, h('strong', {}, 'Page B Ready'), ' 🚀');
+        window.ReactExpress.vdom.render(vnode, document.getElementById('bMount'));
+      </script>
+    </div>
+  </body>
+</html>

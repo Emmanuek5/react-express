@@ -22,6 +22,7 @@ export default {
       "./client/store.js",
       "./client/error-boundary.js",
       "./client/animations.js",
+      "./client/error-overlay.js",
     ],
   },
   output: {

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React-Express Examples</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Noto Sans', 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; margin: 0; padding: 24px; background: #fafafa; color: #222; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+      .card { background: #fff; border: 1px solid #e6e6e6; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+      .card h2 { margin-top: 0; font-size: 18px; }
+      .row { display: flex; align-items: center; gap: 12px; }
+      .muted { color: #666; font-size: 12px; }
+      label { display: block; font-weight: 600; margin-top: 8px; }
+      input, button, select, textarea { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid #dcdcdc; }
+      button { background: #111827; color: white; border: none; cursor: pointer; }
+      button.secondary { background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; }
+      img.avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
+      .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid #e5e7eb; font-size: 12px; }
+      .ok { color: #065f46; }
+      .err { color: #b91c1c; }
+      .space-y > * + * { margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>React‑Express Examples</h1>
+    <p class="muted">Live examsple for Suspense, Forms, Context, Animations, State, Hooks/Components, Router, Virtual DOM, and Store. HMR is enabled in development.</p>
+
+    <div data-content>
+      <div class="grid">
+        <!-- Suspense Example -->
+        <section class="card space-y">
+          <h2>Suspense: Fessstch profile</h2>
+          <div id="profile" class="space-y" data-suspense data-api="/api/profile" data-cache-duration="15000">
+            <div data-suspense-placeholder>
+              <div class="react-express-loader">Loading profile…</div>
+            </div>
+
+            <div class="row">
+              <img class="avatar" data-bind="avatar" alt="avatar" />
+              <div>
+                <div><strong data-bind="name"></strong></div>
+                <div class="muted" data-bind="email"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <button id="refreshProfile" class="secondary">Refetch</button>
+            <span class="muted">Uses cache for 15s; HMR re-renders template from cache without refetching.</span>
+          </div>
+        </section>
+
+        <!-- Forms Example -->
+        <section class="card space-y">
+          <h2>Forms: JSON submit</h2>
+          <form id="contactForm" data-react-form="ContactForm" action="/api/submit" method="post" data-content-type="application/json" data-validate data-reset-on-success data-success="onSubmitSuccess">
+            <label>Name</label>
+            <input name="name" placeholder="Jane Doe" required />
+
+            <label>Email</label>
+            <input type="email" name="email" placeholder="jane@example.com" required />
+
+            <label>Message</label>
+            <textarea name="message" placeholder="Hi there…"></textarea>
+
+            <div class="row" style="margin-top: 12px;">
+              <button type="submit">Send</button>
+              <span id="submitStatus" class="pill">Idle</span>
+            </div>
+          </form>
+        </section>
+
+        <!-- Context Example -->
+        <section class="card space-y">
+          <h2>Context: Theme</h2>
+          <div class="row">
+            <button id="lightBtn" class="secondary">Light</button>
+            <button id="darkBtn" class="secondary">Dark</button>
+          </div>
+
+          <!-- Provider uses capitalized name "Theme" to resolve window.ThemeContext -->
+          <div id="themeProvider" data-context="Theme" data-context-value="light">
+            <div class="pill">Current theme: <span data-context-consumer="Theme">{value}</span></div>
+          </div>
+        </section>
+
+        <!-- Animations Example -->
+        <section class="card space-y">
+          <h2>Animations</h2>
+          <div id="animBox" style="width: 100%; height: 64px; background: #f3f4f6; border-radius: 8px; display: grid; place-items: center;">Box</div>
+          <div class="row">
+            <button id="fadeInBtn" class="secondary">Fade In</button>
+            <button id="fadeOutBtn" class="secondary">Fade Out</button>
+          </div>
+        </section>
+
+        <!-- State Example -->
+        <section class="card space-y">
+          <h2>State: data-react-state bindings</h2>
+          <div class="row">
+            <button id="incCount" class="secondary">+1</button>
+            <button id="decCount" class="secondary">-1</button>
+            <span class="pill">Count: <strong data-react-state="count"></strong></span>
+          </div>
+          <label>Your name (two-way bound)</label>
+          <input data-react-state="name" placeholder="Type your name" />
+          <div>Hello, <strong data-react-state="name"></strong></div>
+        </section>
+
+        <!-- Hooks/Components Example -->
+        <section class="card space-y">
+          <h2>Components: createComponent</h2>
+          <div id="counterComp" class="space-y">
+            <div>Local count: <span class="count">0</span></div>
+            <div class="row">
+              <button id="increment" class="secondary">Increment</button>
+              <button id="decrement" class="secondary">Decrement</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Router Example -->
+        <section class="card space-y">
+          <h2>Router: SPA navigation</h2>
+          <p class="muted">These links navigate without full page reload and replace the <code>[data-content]</code> container.</p>
+          <div class="row">
+            <a href="/page-a" data-route prefetch class="secondary" style="padding:8px 12px; text-decoration:none;">Go to Page A</a>
+            <a href="/page-b" data-route prefetch class="secondary" style="padding:8px 12px; text-decoration:none;">Go to Page B</a>
+          </div>
+        </section>
+
+        <!-- Virtual DOM Example -->
+        <section class="card space-y">
+          <h2>Virtual DOM</h2>
+          <div id="vdomMount" style="min-height:40px; padding:8px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;"></div>
+          <div class="row">
+            <button id="vdomRender" class="secondary">Render List</button>
+            <button id="vdomToggle" class="secondary">Toggle Variant</button>
+          </div>
+        </section>
+
+        <!-- Store Example -->
+        <section class="card space-y">
+          <h2>Store: mutations & actions</h2>
+          <form id="storeForm" class="row" onsubmit="return false;">
+            <input id="storeInput" placeholder="Add item" />
+            <button id="storeAdd" class="secondary" type="button">Commit addItem</button>
+            <button id="storeAddAsync" class="secondary" type="button">Dispatch asyncAdd</button>
+          </form>
+          <ul data-react-state="items" data-format="list"></ul>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      // Create Theme context on window for provider/consumer resolution
+      window.ThemeContext = ReactExpress.createContext('light');
+
+      // Suspense: manual refetch helper (clears cache and re-loads)
+      document.getElementById('refreshProfile').addEventListener('click', () => {
+        ReactExpress.LoaderManager.clearCache('/api/profile');
+        // Remove processed flag to force reload
+        const c = document.getElementById('profile');
+        c.removeAttribute('data-processed');
+        const mgr = ReactExpress.LoaderManager.getInstance(c);
+        mgr.loadContent(c);
+      });
+
+      // Forms: validation and success callback
+      window.validateContactForm = function (data) {
+        if (!data.name) return 'Name is required';
+        if (!data.email || !/^[^@]+@[^@]+\.[^@]+$/.test(data.email)) return 'Valid email is required';
+        return true;
+      }
+      window.onSubmitSuccess = function (result) {
+        const el = document.getElementById('submitStatus');
+        el.textContent = 'Sent';
+        el.classList.add('ok');
+        setTimeout(() => { el.textContent = 'Idle'; el.classList.remove('ok'); }, 1500);
+      }
+      // Reflect form lifecycle to status pill
+      document.getElementById('contactForm').addEventListener('formError', (e) => {
+        const el = document.getElementById('submitStatus');
+        el.textContent = 'Error';
+        el.classList.add('err');
+        setTimeout(() => { el.textContent = 'Idle'; el.classList.remove('err'); }, 1500);
+      });
+
+      // Context: switch provider value by toggling attribute (observed by context.js)
+      document.getElementById('lightBtn').onclick = () => {
+        document.getElementById('themeProvider').setAttribute('data-context-value', 'light');
+      }
+      document.getElementById('darkBtn').onclick = () => {
+        document.getElementById('themeProvider').setAttribute('data-context-value', 'dark');
+      }
+
+      // Animations: simple fade in/out on the box
+      const box = document.getElementById('animBox');
+      document.getElementById('fadeInBtn').onclick = () => ReactExpress.animations.fade(box, { direction: 'in', duration: 400 });
+      document.getElementById('fadeOutBtn').onclick = () => ReactExpress.animations.fade(box, { direction: 'out', duration: 400 });
+
+      // Bonus: animate profile on content load
+      document.getElementById('profile').addEventListener('content-loaded', () => {
+        ReactExpress.animations.slide(document.getElementById('profile'), { direction: 'in', duration: 300 });
+      });
+
+      // --- State example ---
+      {
+        const [getCount, setCount] = ReactExpress.hooks.useState('count', 0);
+        document.getElementById('incCount').onclick = () => setCount((c) => (typeof c === 'number' ? c + 1 : 1));
+        document.getElementById('decCount').onclick = () => setCount((c) => (typeof c === 'number' ? c - 1 : -1));
+        // Initialize a name binding
+        const [, setName] = ReactExpress.hooks.useState('name', '');
+        // Optional: seed value
+        setName('Jane');
+      }
+
+      // --- Components example ---
+      {
+        const comp = ReactExpress.components.createComponent(
+          document.getElementById('counterComp'),
+          {
+            initialState: { count: 0 },
+            init: (c) => {
+              c.listen('#increment', 'click', (_e, self) => self.setState((s) => ({ count: s.count + 1 })));
+              c.listen('#decrement', 'click', (_e, self) => self.setState((s) => ({ count: s.count - 1 })));
+            },
+            render: (state, el) => {
+              el.querySelector('.count').textContent = state.count;
+            },
+          }
+        );
+        // initial render
+        comp.render();
+      }
+
+      // --- Virtual DOM example ---
+      {
+        const mount = document.getElementById('vdomMount');
+        const h = ReactExpress.createElement;
+        let alt = false;
+        function renderList() {
+          const items = alt ? ['alpha', 'beta', 'gamma'] : ['one', 'two', 'three'];
+          const vnode = h('div', { className: 'list' },
+            h('h4', {}, 'VDOM Rendered List (' + (alt ? 'B' : 'A') + ')'),
+            h('ul', {}, items.map((t) => h('li', {}, t)))
+          );
+          ReactExpress.vdom.render(vnode, mount);
+        }
+        document.getElementById('vdomRender').onclick = renderList;
+        document.getElementById('vdomToggle').onclick = () => { alt = !alt; renderList(); };
+      }
+
+      // --- Store example ---
+      {
+        const store = ReactExpress.createStore({
+          state: { items: [] },
+          mutations: {
+            addItem(state, item) { state.items = [...(state.items || []), item]; },
+          },
+          actions: {
+            async asyncAdd({ commit }, item) { await new Promise(r => setTimeout(r, 250)); commit('addItem', item); },
+          },
+        });
+        // Wire buttons
+        const input = document.getElementById('storeInput');
+        document.getElementById('storeAdd').onclick = () => {
+          const v = input.value.trim(); if (!v) return; store.commit('addItem', v); input.value = '';
+        };
+        document.getElementById('storeAddAsync').onclick = async () => {
+          const v = input.value.trim(); if (!v) return; await store.dispatch('asyncAdd', v); input.value = '';
+        };
+      }
+    </script>
+  </body>
+</html>

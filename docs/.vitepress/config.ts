@@ -26,6 +26,7 @@ export default defineConfig({
           { text: 'Lifecycle', link: '/lifecycle' },
           { text: 'Router', link: '/router' },
           { text: 'State Management', link: '/state-management' },
+          { text: 'Reactive State', link: '/reactive-state' },
           { text: 'State', link: '/state' },
           { text: 'Suspense', link: '/suspense' },
           { text: 'Virtual DOM', link: '/vdom' },
