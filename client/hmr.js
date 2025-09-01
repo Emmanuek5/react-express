@@ -49,29 +49,25 @@ class HotModuleReplacement {
     );
     const html = await response.text();
 
-    // Create temporary container to parse content
-    const temp = document.createElement("html");
-    temp.innerHTML = html;
+    // Parse the new HTML
+    const parser = new DOMParser();
+    const newDoc = parser.parseFromString(html, "text/html");
 
     // Preserve current state and UI context
     const stateValues = this.captureStateValues();
     const formStates = this.captureFormStates();
     const focusAndScroll = this.captureFocusAndScroll();
 
-    // Identify root containers
-    const currentContainer = this.getRootContainer(document);
-    const nextContainer = this.getRootContainer(temp);
-
-    // Merge only the target container
-    this.mergeContent(currentContainer, nextContainer);
+    // Replace the entire body content
+    this.replacePageContent(newDoc);
 
     // Restore states and UI context
     this.restoreStateValues(stateValues);
     this.restoreFormStates(formStates);
     this.restoreFocusAndScroll(focusAndScroll);
 
-    // Re-execute scripts inside the updated container and hot-swap stylesheets
-    this.processScripts(currentContainer);
+    // Process and execute all scripts in the new content
+    this.processScripts(document.body);
     this.processStyles();
     
     // Re-initialize ReactExpress systems (state, components)
@@ -88,7 +84,7 @@ class HotModuleReplacement {
     }
     try {
       if (window.ReactExpress && typeof window.ReactExpress.initializeComponents === 'function') {
-        window.ReactExpress.initializeComponents(currentContainer);
+        window.ReactExpress.initializeComponents(document.body);
       }
     } catch (e) {
       try {
@@ -149,14 +145,35 @@ class HotModuleReplacement {
   }
 
   /**
-   * Merge content while preserving critical scripts and handling styles
+   * Replace entire page content while preserving critical scripts
    * @private
-   * @param {HTMLElement} oldContainer - Current content container
-   * @param {HTMLElement} newContainer - New content container
+   * @param {Document} newDoc - New document to replace content with
    */
-  mergeContent(oldContainer, newContainer) {
-    // Replace only the target container content
-    oldContainer.innerHTML = newContainer ? newContainer.innerHTML : '';
+  replacePageContent(newDoc) {
+    // Update document title
+    if (newDoc.title) {
+      document.title = newDoc.title;
+    }
+
+    // Replace head styles (excluding critical scripts)
+    const currentHeadStyles = document.querySelectorAll('head style, head link[rel="stylesheet"]');
+    const newHeadStyles = newDoc.querySelectorAll('head style, head link[rel="stylesheet"]');
+    
+    // Remove old styles
+    currentHeadStyles.forEach(style => {
+      if (!style.hasAttribute('data-hmr-preserve')) {
+        style.remove();
+      }
+    });
+    
+    // Add new styles
+    newHeadStyles.forEach(style => {
+      const clonedStyle = style.cloneNode(true);
+      document.head.appendChild(clonedStyle);
+    });
+
+    // Replace entire body content
+    document.body.innerHTML = newDoc.body.innerHTML;
   }
 
   /**
@@ -203,7 +220,6 @@ class HotModuleReplacement {
     if (!container) return;
     const scripts = Array.from(container.querySelectorAll("script")).filter(
       (script) =>
-        !script.hasAttribute("data-processed") &&
         !(script.src && (script.src.includes("socket.io") || script.src.includes("react-express.bundle.js"))) &&
         !script.hasAttribute("data-hmr-skip")
     );
@@ -219,7 +235,7 @@ class HotModuleReplacement {
           newScript.textContent = script.textContent;
         }
 
-        newScript.setAttribute("data-processed", "true");
+        // Always execute scripts during HMR
         script.parentNode.replaceChild(newScript, script);
       } catch (scriptError) {
         console.error("Error processing script:", scriptError);

@@ -172,9 +172,8 @@ class Router {
       const title = (doc.querySelector("title")?.textContent || "").trim() ||
         document.title;
 
-      // Locate content container
-      const fetchedContentEl =
-        doc.querySelector("[data-content]") || doc.body || doc.documentElement;
+      // For full page replacement, use the entire body
+      const fetchedContentEl = doc.body || doc.documentElement;
 
       // Build content HTML without inline scripts/styles (they are handled separately)
       const contentClone = fetchedContentEl.cloneNode(true);
@@ -223,9 +222,9 @@ class Router {
         });
       });
 
-      // Collect inline scripts from within content only (execute later in order)
+      // Collect inline scripts from entire document (execute later in order)
       const inlineScripts = [];
-      fetchedContentEl
+      doc
         .querySelectorAll("script:not([src])")
         .forEach((script) => {
           inlineScripts.push(script.textContent || "");
@@ -402,34 +401,24 @@ class Router {
 
       await Promise.all(resourcePromises);
 
-      // Replace the content
-      if (currentContent) {
-        currentContent.innerHTML = pageData.content;
+      // Replace the entire page content
+      this.replaceEntirePageContent(pageData);
 
-        // Execute inline scripts in order
-        for (const scriptContent of pageData.inlineScripts) {
-          const script = document.createElement("script");
-          script.textContent = scriptContent;
-          currentContent.appendChild(script);
+      if (this.options.animations) {
+        const newContent = document.querySelector("[data-content]");
+        if (newContent) {
+          newContent.classList.remove("transitioning");
         }
+      }
 
-        if (this.options.animations) {
-          currentContent.classList.remove("transitioning");
+      // Scroll handling
+      if (this.options.preserveScroll) {
+        if (typeof this.pendingScrollY === "number") {
+          window.scrollTo(0, this.pendingScrollY);
+          this.pendingScrollY = undefined;
+        } else {
+          window.scrollTo(0, 0);
         }
-
-        // Scroll handling
-        if (this.options.preserveScroll) {
-          if (typeof this.pendingScrollY === "number") {
-            window.scrollTo(0, this.pendingScrollY);
-            this.pendingScrollY = undefined;
-          } else {
-            window.scrollTo(0, 0);
-          }
-        }
-      } else {
-        console.error("No [data-content] element found");
-        // window.location.href = url; // Fallback to regular navigation
-        return;
       }
 
       // Update browser history
@@ -452,7 +441,7 @@ class Router {
       }
       try {
         if (window.ReactExpress && typeof window.ReactExpress.initializeComponents === 'function') {
-          window.ReactExpress.initializeComponents(currentContent);
+          window.ReactExpress.initializeComponents(document.body);
         }
       } catch (e) {
         try {
@@ -508,15 +497,8 @@ class Router {
             ];
             await Promise.all(resourcePromises);
 
-            // Update content
-            currentContent.innerHTML = notFoundPageData.content;
-
-            // Execute inline scripts
-            for (const scriptContent of notFoundPageData.inlineScripts) {
-              const script = document.createElement("script");
-              script.textContent = scriptContent;
-              currentContent.appendChild(script);
-            }
+            // Replace entire page content with 404 page
+            this.replaceEntirePageContent(notFoundPageData);
           }
 
           // Update browser history to show original URL
@@ -544,6 +526,60 @@ class Router {
         window.location.href = url;
       }
     }
+  }
+
+  /**
+   * Replace entire page content with new page data
+   * @private
+   * @param {Object} pageData - New page data
+   */
+  replaceEntirePageContent(pageData) {
+    // Update document title
+    document.title = pageData.title;
+
+    // Preserve critical scripts before replacing body content
+    const criticalScripts = Array.from(document.querySelectorAll('script[src*="react-express.bundle.js"], script[src*="socket.io"]'));
+    
+    // Replace entire body content
+    document.body.innerHTML = pageData.content;
+
+    // Re-add critical scripts to maintain ReactExpress functionality
+    criticalScripts.forEach(script => {
+      const newScript = document.createElement('script');
+      if (script.src) newScript.src = script.src;
+      if (script.textContent) newScript.textContent = script.textContent;
+      Array.from(script.attributes).forEach(attr => {
+        if (attr.name !== 'src') {
+          newScript.setAttribute(attr.name, attr.value);
+        }
+      });
+      document.body.appendChild(newScript);
+    });
+
+    // Execute inline scripts after ensuring ReactExpress is available
+    const executeScripts = () => {
+      if (!window.ReactExpress || !window.ReactExpress.createElement) {
+        setTimeout(executeScripts, 50);
+        return;
+      }
+      
+      for (const scriptContent of pageData.inlineScripts) {
+        try {
+          const script = document.createElement("script");
+          script.textContent = scriptContent;
+          document.body.appendChild(script);
+        } catch (error) {
+          console.error('Error executing inline script:', error);
+          try {
+            window.ReactExpress &&
+              window.ReactExpress.ErrorOverlay &&
+              window.ReactExpress.ErrorOverlay.log(error, { type: 'script-execution' });
+          } catch {}
+        }
+      }
+    };
+    
+    executeScripts();
   }
 
   async handleError(type, error, context) {

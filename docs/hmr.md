@@ -1,15 +1,15 @@
 # Hot Module Reloading (HMR)
 
-The HMR module updates only the application container rather than reloading the whole page, preserving user context and minimizing jank. It integrates with the unified Hooks + VDOM architecture.
+**UPDATED BEHAVIOR**: The HMR module now performs complete page replacement instead of container-scoped patching. This ensures consistent behavior with the router and proper JavaScript re-execution during development updates.
 
 ## Features
 
-- Container-scoped patching (no full-body replace)
+- **Full page replacement** (complete body content update)
 - Form state preservation (value/checked/selection)
 - Focus and window scroll preservation
 - Stylesheet hot-swap (cache-busted href)
 - Debounced updates (server + client)
-- Safer script handling (skip boot/HMR scripts)
+- Complete script re-execution (excluding core HMR/socket scripts)
 - Custom update listeners
 - Error overlay (dev-only)
 - Dev-only placeholder route with path sanitization
@@ -47,13 +47,14 @@ The HMR module automatically preserves:
 ### Update Process
 
 1. Fetch placeholder HTML for the current route (dev-only endpoint)
-2. Parse HTML and select the root container
+2. Parse complete HTML document using DOMParser
 3. Preserve state, focus, and scroll
-4. Patch only the root container’s inner HTML
-5. Re-run scripts inside the container (skip boot/HMR)
-6. Hot-swap stylesheets
+4. **Replace entire body content** and update document title
+5. **Re-execute all scripts** (excluding core HMR/socket scripts)
+6. Hot-swap stylesheets with cache-busting
 7. Restore state, focus, and scroll
-8. Dispatch `hmr:updated`
+8. Re-initialize ReactExpress components
+9. Dispatch `hmr:updated`
 
 ### Error Handling
 
@@ -136,8 +137,9 @@ HMR fetch requests add a custom header:
    - Listen for `hmr:updated` details to surface errors
 
 4. **Performance**
-   - Scope updates to a root container (add `data-react-root` if needed)
-   - Prefer VDOM-rendered sections to minimize DOM thrash
+   - Full page replacement ensures complete state reset
+   - JavaScript re-execution guarantees fresh component initialization
+   - VDOM sections are automatically re-initialized
 
 5. **Security**
    - HMR is disabled in production

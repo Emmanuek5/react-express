@@ -112,33 +112,45 @@ Notes:
 
 ### Important Implementation Requirements
 
-### Required HTML Attributes
+### Full Page Replacement
 
-For the router to function properly, you must include specific data attributes in your HTML:
+**NEW BEHAVIOR**: The router now performs complete page replacement instead of targeting specific containers. This ensures:
 
-1. **Main Layout File**
-   - Add a `data-content` attribute to the main content container where pages will be loaded
+- Complete JavaScript re-execution on navigation
+- Full page state reset between routes
+- Proper cleanup of previous page resources
+- Consistent behavior between HMR and routing
+
+### Page Structure Requirements
+
+1. **Page Template Files**
+   - Each page template should be a complete HTML document
+   - Include all necessary scripts, styles, and content
    - Example:
    ```html
-   <main data-content>
-     <!-- Page content will be loaded here -->
-   </main>
+   <!DOCTYPE html>
+   <html>
+   <head>
+     <title>Page Title</title>
+     <style>/* page styles */</style>
+   </head>
+   <body>
+     <div data-content>
+       <!-- Your page content -->
+     </div>
+     <script>
+       // Page-specific JavaScript will execute on navigation
+     </script>
+   </body>
+   </html>
    ```
 
-2. **Page Template Files**
-   - Each page template that can be loaded by the router must have a root element with `data-content`
-   - Example:
-   ```html
-   <div data-content>
-     <!-- Your page specific content -->
-   </div>
-   ```
+2. **JavaScript Execution**
+   - All inline scripts are re-executed on navigation
+   - External scripts are loaded and cached appropriately
+   - ReactExpress components are automatically re-initialized
 
-These attributes are essential for:
-- Proper page transitions
-- Content replacement during navigation
-- Maintaining scroll position
-- Animation handling
+This ensures that navigating from page A to page B completely replaces A with B, including all JavaScript functionality.
 
 ### Page Transitions
 
