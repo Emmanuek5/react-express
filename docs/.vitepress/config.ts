@@ -1,8 +1,8 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: "React Express",
-  description: "Documentation for React Express",
+  title: "advanced-express",
+  description: "Interactive, server-rendered Express apps without a front-end build step",
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },
@@ -12,25 +12,23 @@ export default defineConfig({
       {
         text: 'Introduction',
         items: [
-          { text: 'Getting Started', link: '/index' },
+          { text: 'Getting Started', link: '/' },
         ]
       },
       {
-        text: 'Core Concepts',
+        text: 'Guide',
         items: [
-          { text: 'Context', link: '/context' },
-          { text: 'Error Boundary', link: '/error-boundary' },
-          { text: 'Forms', link: '/forms' },
-          { text: 'Hot Module Replacement', link: '/hmr' },
-          { text: 'Hooks', link: '/hooks' },
-          { text: 'Lifecycle', link: '/lifecycle' },
-          { text: 'Router', link: '/router' },
-          { text: 'State Management', link: '/state-management' },
-          { text: 'Reactive State', link: '/reactive-state' },
-          { text: 'State', link: '/state' },
-          { text: 'Suspense', link: '/suspense' },
-          { text: 'Virtual DOM', link: '/vdom' },
-          { text: 'Animations', link: '/animations' },
+          { text: 'Server', link: '/guide#server' },
+          { text: 'State and bindings', link: '/guide#state-and-bindings' },
+          { text: 'Scopes', link: '/guide#scopes' },
+          { text: 'Components', link: '/guide#components' },
+          { text: 'Lists', link: '/guide#lists' },
+          { text: 'Data fetching', link: '/guide#data-fetching' },
+          { text: 'Forms', link: '/guide#forms' },
+          { text: 'Router', link: '/guide#router' },
+          { text: 'Animations', link: '/guide#animations' },
+          { text: 'Live state', link: '/guide#live-state' },
+          { text: 'Dev mode', link: '/guide#dev-mode' },
         ]
       }
     ],
