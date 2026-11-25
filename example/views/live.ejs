@@ -1,0 +1,8 @@
+<%- include('partials/top') %>
+<h1>Live state</h1>
+<p>Values pushed from the server with <code>rx.broadcast(key, value)</code>. Browsers can only read them.</p>
+<section class="card">
+  <p>Announcement: <b id="announcement" data-text="announcement">—</b></p>
+  <p class="muted">Try: <code>curl -X POST localhost:3000/api/broadcast -H "content-type: application/json" -d '{"key":"announcement","value":"Hello"}'</code></p>
+</section>
+<%- include('partials/bottom') %>

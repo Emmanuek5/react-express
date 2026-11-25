@@ -1,0 +1,63 @@
+<%- include('partials/top') %>
+<h1>Data &amp; Forms</h1>
+
+<section class="card" data-fetch="/api/users/1" data-cache="15000" id="profile">
+  <h2>Profile (data-fetch)</h2>
+  <p data-show="loading" class="muted">Loading…</p>
+  <p data-show="error" class="err" data-text="error"></p>
+  <div data-show="data" class="row">
+    <img class="avatar" data-attr-src="data.avatar" alt="" />
+    <div><b data-text="data.name"></b><br /><span class="muted" data-text="data.email"></span></div>
+  </div>
+  <button data-on="click:refresh" id="profile-refresh">Refetch</button>
+</section>
+
+<section class="card" data-fetch="/api/users/999" id="missing">
+  <h2>Missing user (error state)</h2>
+  <p data-show="loading">Loading…</p>
+  <p class="err" data-text="error"></p>
+</section>
+
+<section class="card" data-fetch="/api/counter" id="fresh">
+  <h2>Uncached fetch</h2>
+  <p>n = <b data-text="data.n"></b></p>
+  <button data-on="click:refresh" id="fresh-refresh">Refetch</button>
+</section>
+
+<section class="card">
+  <h2>Sign-up form (data-form)</h2>
+  <form data-form data-json data-validate="signup" action="/api/signup" method="post" data-into="signup" id="signup">
+    <label>Name <input name="name" required /></label>
+    <small class="err" data-error-for="name"></small>
+    <label>Email <input name="email" type="email" required /></label>
+    <small class="err" data-error-for="email"></small>
+    <label>Plan
+      <select name="plan"><option>free</option><option>pro</option></select>
+    </label>
+    <fieldset>
+      <legend>Interests</legend>
+      <label><input type="checkbox" name="interests" value="news" /> news</label>
+      <label><input type="checkbox" name="interests" value="tips" /> tips</label>
+    </fieldset>
+    <button id="signup-submit">Sign up</button>
+    <span data-show="pending" class="muted">Sending…</span>
+    <p class="err" data-text="error" id="form-error"></p>
+  </form>
+  <p data-show="signup" id="signup-ok">Welcome, <b data-text="signup.name"></b> (<span data-text="signup.interests | json"></span>)</p>
+</section>
+
+<section class="card">
+  <h2>GET form</h2>
+  <form data-form action="/api/search" method="get" id="search">
+    <input name="q" value="hello world" />
+    <button>Search</button>
+    <span id="search-result" data-text="result.q"></span>
+  </form>
+</section>
+
+<script>
+  rx.validator("signup", (values) => {
+    if (values.name && values.name.length < 2) return { name: "Name must be at least 2 characters" };
+  });
+</script>
+<%- include('partials/bottom') %>

@@ -1,0 +1,74 @@
+<%- include('partials/top') %>
+<h1>Components</h1>
+
+<section class="card" data-component="counter" data-prop-step="5" data-state='{"count":0}' id="c1">
+  <h2>Counter, step <span data-text="step"></span></h2>
+  <button data-on="click:down">−</button>
+  <strong class="big" data-text="count"></strong>
+  <button data-on="click:up">+</button>
+</section>
+
+<section class="card" data-component="counter" data-state='{"count":100}' id="c2">
+  <h2>Second instance (independent state)</h2>
+  <button data-on="click:down">−</button>
+  <strong class="big" data-text="count"></strong>
+  <button data-on="click:up">+</button>
+</section>
+
+<section class="card" data-component="todos" data-state='{"items":[],"draft":""}' id="todos">
+  <h2>Todos (data-each)</h2>
+  <form data-on="submit:add">
+    <input data-model="draft" placeholder="What needs doing?" data-ref="input" />
+    <button>Add</button>
+  </form>
+  <ul data-each="items">
+    <template>
+      <li>
+        <span data-text="$item.text" data-class-done="$item.done"></span>
+        <button data-on="click:toggle" class="small">done</button>
+        <button data-on="click:remove" class="small">×</button>
+      </li>
+    </template>
+  </ul>
+  <p class="muted" data-show="!items">Nothing to do.</p>
+  <p class="muted"><span data-text="items | length"></span> item(s)</p>
+</section>
+
+<script>
+  // Top-level const in a page script: must survive repeat visits via the router.
+  const pageLoadedAt = Date.now();
+  window.componentsVisits = (window.componentsVisits || 0) + 1;
+
+  rx.component("counter", ({ state, props }) => {
+    const step = Number(props.step ?? 1);
+    state.define("step", step);
+    return {
+      up: () => state.update("count", (n) => n + step),
+      down: () => state.update("count", (n) => n - step),
+    };
+  });
+
+  rx.component("todos", ({ state, refs, onCleanup }) => {
+    let id = 0;
+    onCleanup(() => (window.todosCleanedUp = (window.todosCleanedUp || 0) + 1));
+    const indexOf = (el) => rx.scope(el).get("$index");
+    return {
+      add() {
+        const text = state.get("draft").trim();
+        if (!text) return;
+        state.update("items", (items) => [...items, { id: ++id, text, done: false }]);
+        state.set("draft", "");
+        refs.input.focus();
+      },
+      toggle(_e, el) {
+        const i = indexOf(el);
+        state.update("items", (items) => items.map((t, j) => (j === i ? { ...t, done: !t.done } : t)));
+      },
+      remove(_e, el) {
+        const i = indexOf(el);
+        state.update("items", (items) => items.filter((_, j) => j !== i));
+      },
+    };
+  });
+</script>
+<%- include('partials/bottom') %>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %> · advanced-express</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="top">
+      <strong>advanced-express</strong>
+      <nav data-router>
+        <% nav.forEach(function (item) { %>
+          <a href="<%= item.href %>" data-prefetch class="<%= path === item.href ? 'active' : '' %>"><%= item.label %></a>
+        <% }) %>
+      </nav>
+    </header>
+    <main data-content>

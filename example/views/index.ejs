@@ -1,0 +1,62 @@
+<%- include('partials/top') %>
+<h1>State &amp; bindings</h1>
+
+<section class="card" id="counter">
+  <h2>Counter (global state, seeded by the server)</h2>
+  <button data-on="click:dec">−</button>
+  <strong class="big" data-text="count">0</strong>
+  <button data-on="click:inc">+</button>
+  <p data-show="count | positive" class="muted">Positive!</p>
+</section>
+
+<section class="card" id="model">
+  <h2>Two-way binding</h2>
+  <label>Name <input data-model="name" /></label>
+  <p>Hello, <b data-text="name"></b> (<span data-text="name | length"></span> chars)</p>
+
+  <fieldset>
+    <legend>Tags (checkbox group → array)</legend>
+    <label><input type="checkbox" data-model="tags" value="express" /> express</label>
+    <label><input type="checkbox" data-model="tags" value="ejs" /> ejs</label>
+    <label><input type="checkbox" data-model="tags" value="node" /> node</label>
+  </fieldset>
+  <p>Selected: <span id="tags-json" data-text="tags | json"></span></p>
+
+  <label><input type="checkbox" data-model="agree" /> I agree (boolean)</label>
+  <p data-show="agree" id="agreed">Thanks for agreeing.</p>
+
+  <label>Age <input type="number" data-model="age" value="30" /></label>
+  <p>Next year: <span id="next-age" data-text="age | plusOne"></span></p>
+
+  <p id="motd">Server text: <span data-text="motd"></span></p>
+  <a id="bad-link" data-attr-href="badUrl">Unsafe link</a>
+</section>
+
+<section class="card" data-scope data-state='{"theme":"dark"}' id="theme-scope">
+  <h2>Scopes (context)</h2>
+  <p>Inner theme: <b id="inner-theme" data-text="theme"></b> · Outer count: <b id="inner-count" data-text="count"></b></p>
+  <button data-on="click:toggleTheme" id="toggle-theme">Toggle inner theme</button>
+</section>
+<p>Outer theme: <b id="outer-theme" data-text="theme"></b></p>
+
+<section class="card" id="anim">
+  <h2>Animations</h2>
+  <div id="anim-box" class="box">Box</div>
+  <button data-on="click:fadeOut" id="fade-out">Fade out</button>
+  <button data-on="click:fadeIn" id="fade-in">Fade in</button>
+</section>
+
+<script>
+  rx.formatter("positive", (n) => n > 0);
+  rx.formatter("plusOne", (n) => (typeof n === "number" ? n + 1 : ""));
+  rx.action("inc", () => rx.update("count", (n) => n + 1));
+  rx.action("dec", () => rx.update("count", (n) => n - 1));
+  rx.action("toggleTheme", (_e, el) => {
+    const scope = rx.scope(el);
+    scope.set("theme", scope.get("theme") === "dark" ? "light" : "dark");
+  });
+  rx.action("fadeOut", () => rx.animate(document.getElementById("anim-box"), "fadeOut", { duration: 200 }));
+  rx.action("fadeIn", () => rx.animate(document.getElementById("anim-box"), "fadeIn", { duration: 200 }));
+  rx.set("badUrl", "javascript:alert(1)");
+</script>
+<%- include('partials/bottom') %>
