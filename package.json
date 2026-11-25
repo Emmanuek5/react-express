@@ -1,52 +1,64 @@
 {
   "name": "advanced-express",
-  "version": "1.0.9",
+  "version": "2.0.0",
+  "description": "Interactive, server-rendered Express apps: state bindings, components, client-side routing, data fetching, forms and hot reload — no build step, no eval, CSP-friendly.",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/server/index.js",
+  "types": "./dist/server/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./client": "./dist/client/rx.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "tsc",
-    "build": "webpack --config webpack.config.js && tsc",
-    "prepublishOnly": "npm run build",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
+    "test": "npm run build && npm run typecheck && npm run test:server && npm run test:e2e",
+    "test:server": "node --test \"test/server/*.test.ts\"",
+    "test:e2e": "playwright test",
+    "example": "npm run build && node example/server.ts",
+    "prepublishOnly": "npm test",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "docs:deploy": "bun run docs:build && wrangler pages deploy docs/.vitepress/dist"
-  },
-  "dependencies": {
-    "advanced-express": "file:",
-    "cheerio": "^1.0.0",
-    "chokidar": "^3.5.3",
-    "ejs": "^3.1.10",
-    "express": "^4.17.1",
-    "socket.io": "^4.7.2",
-    "vitepress": "^1.5.0"
+    "docs:deploy": "npm run docs:build && wrangler pages deploy docs/.vitepress/dist"
   },
   "peerDependencies": {
-    "express": "^4.17.1"
+    "express": "^4.17.0 || ^5.0.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.0",
-    "@babel/preset-env": "^7.26.0",
     "@playwright/test": "^1.65.1",
     "@types/ejs": "^3.1.5",
     "@types/express": "^4.17.21",
     "@types/node": "^20.10.0",
-    "babel-loader": "^9.2.1",
-    "terser-webpack-plugin": "^5.3.10",
+    "ejs": "^7.0.2",
+    "esbuild": "^0.28.2",
+    "express": "^4.21.2",
     "typescript": "^5.3.2",
-    "webpack": "^5.97.0",
-    "webpack-cli": "^5.1.4"
+    "vitepress": "^1.6.4"
   },
-  "description": "Adding React Features to Express",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Emmanuek5/react-express.git"
   },
   "keywords": [
     "express",
-    "react"
+    "ejs",
+    "ssr",
+    "progressive-enhancement",
+    "htmx-alternative",
+    "reactive"
   ],
   "author": "blueobsidian",
   "license": "MIT",

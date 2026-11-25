@@ -14,7 +14,11 @@ lerna-debug.log*
 
 .cache
 
-e
+# Build output and test artifacts
+dist/
+test-results/
+playwright-report/
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
@@ -61,7 +65,6 @@ node_modules/
 .pnp
 .pnp.js
 jspm_packages/
-#test-server
 
 # Snowpack dependency directory (https://snowpack.dev/)
 
@@ -107,7 +110,6 @@ out
 .fusebox/
 
 # DynamoDB Local files
-#test-server
 .dynamodb/
 docs/.vitepress/cache
 docs/.vitepress/dist
@@ -126,7 +128,6 @@ docs/.vitepress/dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
-test-server
 # Debug
 
 npm-debug.log*
